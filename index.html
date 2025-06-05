@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>WebSocket Chat</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    #messages { border: 1px solid #ccc; height: 300px; overflow-y: scroll; padding: 10px; margin-bottom: 10px; }
+    #input { width: 80%; }
+    #sendBtn { width: 18%; }
+  </style>
+</head>
+<body>
+  <h2>WebSocket Chat</h2>
+  <div id="messages"></div>
+  <input id="input" type="text" placeholder="Type your message..." />
+  <button id="sendBtn">Send</button>
+
+  <script>
+    const WS_URL = 'wss://abdik-webpage-production.up.railway.app';
+
+    const ws = new WebSocket(WS_URL);
+    const messages = document.getElementById('messages');
+    const input = document.getElementById('input');
+    const sendBtn = document.getElementById('sendBtn');
+
+    ws.onopen = () => {
+      addMessage('Connected to server');
+    };
+
+    ws.onmessage = (event) => {
+      addMessage('Received: ' + event.data);
+    };
+
+    ws.onclose = () => {
+      addMessage('Disconnected from server');
+    };
+
+    ws.onerror = (err) => {
+      addMessage('Error: ' + err.message);
+    };
+
+    sendBtn.onclick = () => {
+      if (input.value) {
+        ws.send(input.value);
+        addMessage('Sent: ' + input.value);
+        input.value = '';
+      }
+    };
+
+    function addMessage(msg) {
+      const p = document.createElement('p');
+      p.textContent = msg;
+      messages.appendChild(p);
+      messages.scrollTop = messages.scrollHeight;
+    }
+  </script>
+</body>
+</html>

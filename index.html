@@ -3,194 +3,270 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Abdik-web Panel</title>
+<title>Login/Register Chat Upload</title>
 <style>
-  body { font-family: Arial, sans-serif; max-width: 600px; margin: 20px auto; }
-  #loginForm, #panel { border: 1px solid #ccc; padding: 15px; border-radius: 5px; }
-  #chat { height: 200px; overflow-y: auto; border: 1px solid #ccc; margin-bottom: 10px; padding: 5px; background: #f9f9f9; }
-  #chat div { margin-bottom: 5px; }
-  #uploadForm { margin-top: 15px; }
+  body { font-family: Arial, sans-serif; max-width: 600px; margin: auto; }
+  #chat, #upload, #logs { display: none; margin-top: 20px; border: 1px solid #ccc; padding: 10px; }
+  #logs { max-height: 150px; overflow-y: auto; background: #eee; }
+  .hidden { display: none; }
+  input, button { padding: 8px; margin: 5px 0; width: 100%; }
   button { cursor: pointer; }
 </style>
 </head>
 <body>
 
-<div id="loginForm">
-  <h2>Login</h2>
-  <form id="formLogin">
-    <label>Username:<br /><input type="text" id="username" required /></label><br /><br />
-    <label>Password:<br /><input type="password" id="password" required /></label><br /><br />
-    <button type="submit">Login</button>
-  </form>
-  <div id="loginError" style="color:red; margin-top:10px;"></div>
+<h1>Login / Register</h1>
+
+<div id="auth-section">
+  <input type="text" id="username" placeholder="Username" />
+  <input type="password" id="password" placeholder="Password" />
+  <button id="login-btn">Login</button>
+  <button id="register-btn">Register</button>
+  <p id="auth-message" style="color:red;"></p>
 </div>
 
-<div id="panel" style="display:none;">
-  <h2 id="panelTitle"></h2>
-  <p>Welcome, <span id="userDisplay"></span> (<span id="roleDisplay"></span>)</p>
-  <button id="btnLogout">Logout</button>
+<div id="user-section" class="hidden">
+  <h2>Welcome, <span id="display-username"></span>!</h2>
+  <button id="logout-btn">Logout</button>
+</div>
 
-  <h3>Chat</h3>
-  <div id="chat"></div>
-  <form id="formChat">
-    <input id="chatInput" autocomplete="off" placeholder="Type a message" required />
-    <button type="submit">Send</button>
-  </form>
+<div id="chat-upload-section" class="hidden">
+  <div id="chat">
+    <h3>Chat</h3>
+    <div id="chat-messages" style="height: 150px; overflow-y: auto; border: 1px solid #ddd; padding: 5px;"></div>
+    <input type="text" id="chat-input" placeholder="Type message..." />
+    <button id="send-chat-btn">Send</button>
+  </div>
 
-  <h3>Upload File</h3>
-  <form id="uploadForm" enctype="multipart/form-data">
-    <input type="file" id="uploadFile" required />
-    <button type="submit">Upload</button>
-  </form>
-  <div id="uploadStatus" style="margin-top:10px;"></div>
+  <div id="upload">
+    <h3>Upload File</h3>
+    <input type="file" id="file-upload" />
+    <button id="upload-btn">Upload</button>
+    <p id="upload-message" style="color:green;"></p>
+  </div>
+</div>
+
+<div id="logs" class="hidden">
+  <h3>Login Logs (Admin Only)</h3>
+  <div id="log-entries"></div>
 </div>
 
 <script>
-  const API_BASE = "/Abdik-web/api";
+const loginBtn = document.getElementById("login-btn");
+const registerBtn = document.getElementById("register-btn");
+const logoutBtn = document.getElementById("logout-btn");
+const authMessage = document.getElementById("auth-message");
+const usernameInput = document.getElementById("username");
+const passwordInput = document.getElementById("password");
 
-  // Check if logged in (session or localStorage)
-  let currentUser = null;
-  let currentRole = null;
+const authSection = document.getElementById("auth-section");
+const userSection = document.getElementById("user-section");
+const chatUploadSection = document.getElementById("chat-upload-section");
+const logsSection = document.getElementById("logs");
 
-  function showLogin(errorMsg) {
-    document.getElementById('loginForm').style.display = 'block';
-    document.getElementById('panel').style.display = 'none';
-    document.getElementById('loginError').textContent = errorMsg || '';
+const displayUsername = document.getElementById("display-username");
+
+const chatMessages = document.getElementById("chat-messages");
+const chatInput = document.getElementById("chat-input");
+const sendChatBtn = document.getElementById("send-chat-btn");
+
+const fileUploadInput = document.getElementById("file-upload");
+const uploadBtn = document.getElementById("upload-btn");
+const uploadMessage = document.getElementById("upload-message");
+
+const logEntries = document.getElementById("log-entries");
+
+let currentUser = null;
+let currentRole = null;
+
+// Helper to show/hide UI sections
+function setLoggedInUI(username, role) {
+  currentUser = username;
+  currentRole = role;
+  displayUsername.textContent = username;
+  authSection.style.display = "none";
+  userSection.classList.remove("hidden");
+  chatUploadSection.classList.remove("hidden");
+  logoutBtn.style.display = "inline-block";
+
+  if(role === "admin") {
+    logsSection.classList.remove("hidden");
+    fetchLogs();
+  } else {
+    logsSection.classList.add("hidden");
   }
+}
 
-  function showPanel(user, role) {
-    currentUser = user;
-    currentRole = role;
+function logout() {
+  currentUser = null;
+  currentRole = null;
+  displayUsername.textContent = "";
+  authSection.style.display = "block";
+  userSection.classList.add("hidden");
+  chatUploadSection.classList.add("hidden");
+  logsSection.classList.add("hidden");
+  authMessage.textContent = "";
+  usernameInput.value = "";
+  passwordInput.value = "";
+  chatMessages.innerHTML = "";
+  chatInput.value = "";
+  uploadMessage.textContent = "";
+  logEntries.innerHTML = "";
+}
 
-    document.getElementById('loginForm').style.display = 'none';
-    document.getElementById('panel').style.display = 'block';
-    document.getElementById('userDisplay').textContent = user;
-    document.getElementById('roleDisplay').textContent = role;
-    document.getElementById('panelTitle').textContent = role === "admin" ? "Admin Panel" : "User Panel";
-
-    fetchMessages();
-    if (!window.chatInterval) {
-      window.chatInterval = setInterval(fetchMessages, 1000);
-    }
+// Login handler
+loginBtn.addEventListener("click", async () => {
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value;
+  if(!username || !password) {
+    authMessage.textContent = "Please fill username and password";
+    return;
   }
+  authMessage.textContent = "";
 
-  async function login(username, password) {
-    const formData = new URLSearchParams();
-    formData.append('username', username);
-    formData.append('password', password);
-
-    const res = await fetch(API_BASE + "/login", {
-      method: 'POST',
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: formData.toString()
+  try {
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username, password})
     });
     const data = await res.json();
-    return data;
-  }
-
-  async function logout() {
-    await fetch(API_BASE + "/logout", { method: "POST" });
-    currentUser = null;
-    currentRole = null;
-    clearInterval(window.chatInterval);
-    window.chatInterval = null;
-    showLogin();
-  }
-
-  // Chat
-  async function fetchMessages() {
-    const res = await fetch(API_BASE + "/chat/messages");
-    if (res.status === 403) {
-      await logout();
-      return;
+    if(data.success) {
+      setLoggedInUI(username, data.role);
+    } else {
+      authMessage.textContent = data.message;
     }
-    const messages = await res.json();
-    const chatDiv = document.getElementById('chat');
-    chatDiv.innerHTML = messages.map(m => `<div><b>${m.username}:</b> ${escapeHtml(m.message)}</div>`).join('');
-    chatDiv.scrollTop = chatDiv.scrollHeight;
+  } catch(e) {
+    authMessage.textContent = "Server error";
   }
+});
 
-  async function sendMessage(message) {
-    const formData = new URLSearchParams();
-    formData.append('message', message);
+// Register handler
+registerBtn.addEventListener("click", async () => {
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value;
+  if(!username || !password) {
+    authMessage.textContent = "Please fill username and password";
+    return;
+  }
+  authMessage.textContent = "";
 
-    const res = await fetch(API_BASE + "/chat/send", {
-      method: 'POST',
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: formData.toString()
+  try {
+    const res = await fetch("/api/register", {
+      method: "POST",
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username, password})
     });
     const data = await res.json();
-    if (!data.success) {
-      alert("Failed to send message: " + (data.error || "Unknown error"));
+    if(data.success) {
+      authMessage.style.color = "green";
+      authMessage.textContent = data.message;
+    } else {
+      authMessage.style.color = "red";
+      authMessage.textContent = data.message;
     }
+  } catch(e) {
+    authMessage.textContent = "Server error";
   }
+});
 
-  // Upload
-  async function uploadFile(file) {
-    const formData = new FormData();
-    formData.append('file', file);
+// Logout button
+logoutBtn.addEventListener("click", () => {
+  fetch("/api/logout", { method: "POST" }).finally(() => {
+    logout();
+  });
+});
 
-    const res = await fetch('/Abdik-web/upload', {
-      method: 'POST',
+// Send chat message
+sendChatBtn.addEventListener("click", async () => {
+  const message = chatInput.value.trim();
+  if(!message) return;
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({message})
+    });
+    const data = await res.json();
+    if(data.success) {
+      appendChatMessage(data.message);
+      chatInput.value = "";
+    } else {
+      alert(data.message);
+    }
+  } catch(e) {
+    alert("Server error");
+  }
+});
+
+// Append chat message to chat window
+function appendChatMessage(message) {
+  const div = document.createElement("div");
+  div.textContent = message;
+  chatMessages.appendChild(div);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Upload file
+uploadBtn.addEventListener("click", async () => {
+  if(fileUploadInput.files.length === 0) {
+    uploadMessage.style.color = "red";
+    uploadMessage.textContent = "Select a file first";
+    return;
+  }
+  const file = fileUploadInput.files[0];
+  const formData = new FormData();
+  formData.append("file", file);
+
+  uploadMessage.textContent = "";
+  try {
+    const res = await fetch("/api/upload", {
+      method: "POST",
       body: formData
     });
-    const text = await res.text();
-    document.getElementById('uploadStatus').innerHTML = text;
-  }
-
-  // Utils
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
-  // Event listeners
-  document.getElementById('formLogin').addEventListener('submit', async e => {
-    e.preventDefault();
-    const username = document.getElementById('username').value.trim();
-    const password = document.getElementById('password').value;
-
-    if (!username || !password) {
-      showLogin("Please enter username and password.");
-      return;
-    }
-
-    const data = await login(username, password);
-    if (data.success) {
-      showPanel(username, data.role);
+    const data = await res.json();
+    if(data.success) {
+      uploadMessage.style.color = "green";
+      uploadMessage.textContent = data.message;
     } else {
-      showLogin(data.error || "Login failed.");
+      uploadMessage.style.color = "red";
+      uploadMessage.textContent = data.message;
     }
-  });
+  } catch(e) {
+    uploadMessage.style.color = "red";
+    uploadMessage.textContent = "Upload failed";
+  }
+});
 
-  document.getElementById('btnLogout').addEventListener('click', async () => {
-    await logout();
-  });
-
-  document.getElementById('formChat').addEventListener('submit', async e => {
-    e.preventDefault();
-    const input = document.getElementById('chatInput');
-    const msg = input.value.trim();
-    if (!msg) return;
-    await sendMessage(msg);
-    input.value = '';
-  });
-
-  document.getElementById('uploadForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    const fileInput = document.getElementById('uploadFile');
-    if (fileInput.files.length === 0) {
-      alert("Please select a file.");
-      return;
+// Fetch and display login logs (admin only)
+async function fetchLogs() {
+  try {
+    const res = await fetch("/api/logs");
+    const data = await res.json();
+    if(data.success) {
+      logEntries.innerHTML = data.logs.map(e => `<div>${e}</div>`).join("");
+    } else {
+      logEntries.innerHTML = "<div>No logs available or unauthorized</div>";
     }
-    await uploadFile(fileInput.files[0]);
-    fileInput.value = '';
-  });
+  } catch {
+    logEntries.innerHTML = "<div>Error loading logs</div>";
+  }
+}
 
-  // On page load
-  showLogin();
+// Auto check login status on page load
+async function checkSession() {
+  try {
+    const res = await fetch("/api/session");
+    const data = await res.json();
+    if(data.loggedIn) {
+      setLoggedInUI(data.username, data.role);
+    }
+  } catch {}
+}
+
+checkSession();
 
 </script>
+
 </body>
 </html>

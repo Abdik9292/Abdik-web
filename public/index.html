@@ -102,11 +102,17 @@
   </section>
 
   <section aria-label="Profile icon upload">
-    <h3>Upload Profile Icon (Image &lt;10MB)</h3>
+    <h3>Upload Profile Icon (Images &lt;10MB)</h3>
     <input type="file" id="avatar" accept="image/*" aria-describedby="avatar-desc" />
     <small id="avatar-desc">All image types under 10MB allowed.</small>
     <button id="upload-btn" onclick="uploadAvatar()" disabled aria-label="Upload profile icon button">Upload</button>
     <img id="avatar-preview" class="hidden" alt="Profile icon preview" />
+  </section>
+
+  <section aria-label="File upload">
+    <h3>Upload Files (All types &lt;125MB)</h3>
+    <input type="file" id="file-upload" multiple />
+    <button id="file-upload-btn" onclick="uploadFiles()" aria-label="Upload files button">Upload Files</button>
   </section>
 
   <section id="logs-section" class="hidden" aria-label="Login logs">
@@ -250,9 +256,9 @@ async function uploadAvatar() {
   if (file.size > 10 * 1024 * 1024) return alert('Image must be less than 10MB.');
   
   const form = new FormData();
-  form.append('image', file);
+  form.append('avatar', file);
   try {
-    const res = await fetch(`${API}/upload`, {
+    const res = await fetch(`${API}/upload-avatar`, {
       method: 'POST',
       credentials: 'include',
       body: form
@@ -262,7 +268,7 @@ async function uploadAvatar() {
       const preview = document.getElementById('avatar-preview');
       preview.src = URL.createObjectURL(file);
       preview.classList.remove('hidden');
-      alert('Uploaded!');
+      alert('Profile icon uploaded!');
     } else {
       alert(data.error || 'Upload failed.');
     }
@@ -271,18 +277,79 @@ async function uploadAvatar() {
   }
 }
 
-document.getElementById('avatar').addEventListener('change', function() {
-  document.getElementById('upload-btn').disabled = !this.files.length;
+async function uploadFiles() {
+  const input = document.getElementById('file-upload');
+  if (!input.files.length) return alert('Choose file(s) to upload.');
+
+  for (const file of input.files) {
+    if (file.size > 125 * 1024 * 1024) {
+      alert(`File ${file.name} exceeds 125MB limit.`);
+      return;
+    }
+  }
+
+  const form = new FormData();
+  for (const file of input.files) {
+    form.append('files', file);
+  }
+  try {
+    const res = await fetch(`${API}/upload-files`, {
+      method: 'POST',
+      credentials: 'include',
+      body: form
+    });
+    if (res.ok) {
+      alert('Files uploaded successfully!');
+      input.value = '';
+    } else {
+      const data = await res.json();
+      alert(data.error || 'Upload failed.');
+    }
+  } catch {
+    alert('Network error uploading files.');
+  }
+}
+
+// Enable/disable avatar upload button based on file selection and size/type
+document.getElementById('avatar').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  const btn = document.getElementById('upload-btn');
+  if (!file || !file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) {
+    btn.disabled = true;
+  } else {
+    btn.disabled = false;
+  }
 });
 
+// Escape HTML utility for chat messages
 function escapeHtml(text) {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+  return text.replace(/[&<>"']/g, function(m) {
+    return {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[m];
+  });
 }
+
+// Check if user is already logged in on page load (session cookie)
+(async () => {
+  try {
+    const res = await fetch(`${API}/me`, { credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      document.getElementById('welcome').textContent = `Welcome, ${data.username} (${data.role})`;
+      showUserPanel(data.role);
+    } else {
+      showLogin();
+    }
+  } catch {
+    showLogin();
+  }
+})();
 </script>
+
 </body>
 </html>

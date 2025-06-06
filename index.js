@@ -1,200 +1,132 @@
-require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
-const bodyParser = require('body-parser');
+const fileUpload = require('express-fileupload');
+const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const http = require('http');
-const WebSocket = require('ws');
 
 const app = express();
-const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 
-// Serve static files from public
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-
+app.use(cors({
+  origin: 'https://abdik9292.github.io',
+  credentials: true,
+}));
+app.use(express.json());
+app.use(fileUpload());
 app.use(session({
-  secret: 'your-secret-session-key',
+  secret: 'secret-key',
   resave: false,
-  saveUninitialized: false,
+  saveUninitialized: true,
+  cookie: { secure: true } // set true only if using HTTPS
 }));
 
-const USERS_FILE = path.join(__dirname, 'config', 'users.json');
-const LOGS_FILE = path.join(__dirname, 'config', 'logs.json');
+const USERS_FILE = path.join(__dirname, 'config/users.json');
+const LOGS_FILE = path.join(__dirname, 'config/logs.json');
+const CHAT_FILE = path.join(__dirname, 'config/chat.json');
+
+if (!fs.existsSync('config')) fs.mkdirSync('config');
+if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, '{}');
+if (!fs.existsSync(LOGS_FILE)) fs.writeFileSync(LOGS_FILE, '[]');
+if (!fs.existsSync(CHAT_FILE)) fs.writeFileSync(CHAT_FILE, '[]');
 
 function loadUsers() {
-  try {
-    const data = fs.readFileSync(USERS_FILE);
-    return JSON.parse(data);
-  } catch {
-    return [];
-  }
+  return JSON.parse(fs.readFileSync(USERS_FILE));
 }
 
 function saveUsers(users) {
   fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
 }
 
-function loadLogs() {
-  try {
-    const data = fs.readFileSync(LOGS_FILE);
-    return JSON.parse(data);
-  } catch {
-    return [];
-  }
-}
-
-function saveLogs(logs) {
+function logLogin(username, ip) {
+  const logs = JSON.parse(fs.readFileSync(LOGS_FILE));
+  logs.push({ username, ip, timestamp: Date.now() });
   fs.writeFileSync(LOGS_FILE, JSON.stringify(logs, null, 2));
 }
 
-function hasRegisteredIP(ip) {
-  const users = loadUsers();
-  return users.some(u => u.ip === ip);
+function loadChat() {
+  return JSON.parse(fs.readFileSync(CHAT_FILE));
 }
 
-function addLog(username, ip) {
-  const logs = loadLogs();
-  logs.push({ username, ip, timestamp: new Date().toISOString() });
-  saveLogs(logs);
+function saveChat(messages) {
+  fs.writeFileSync(CHAT_FILE, JSON.stringify(messages, null, 2));
 }
 
-function authRequired(req, res, next) {
-  if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
-  next();
-}
-
-function adminRequired(req, res, next) {
-  if (!req.session.user || req.session.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Forbidden: Admins only' });
-  }
-  next();
-}
-
-// --- Routes ---
+// Register
 app.post('/register', (req, res) => {
   const { username, password } = req.body;
-  const ip = req.ip;
-
-  if (!username || !password) return res.status(400).json({ error: 'Missing username or password' });
-  if (username === process.env.ADMIN_USERNAME) {
-    return res.status(400).json({ error: 'Cannot register as admin' });
+  const users = loadUsers();
+  if (users[username]) {
+    return res.status(400).json({ error: 'Username already exists.' });
   }
-
-  if (hasRegisteredIP(ip)) {
-    return res.status(400).json({ error: 'This IP has already registered a user' });
-  }
-
-  let users = loadUsers();
-  if (users.find(u => u.username === username)) {
-    return res.status(400).json({ error: 'Username already exists' });
-  }
-
-  users.push({ username, password, role: 'user', ip });
+  users[username] = { password, role: 'user' };
   saveUsers(users);
   req.session.user = { username, role: 'user' };
-  addLog(username, ip);
-
-  res.json({ success: true, message: 'Registered and logged in!' });
+  res.json({ message: 'Registered successfully.', role: 'user' });
 });
 
+// Login
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
-  const ip = req.ip;
+  const users = loadUsers();
+  const user = users[username];
+  if (!user || user.password !== password) {
+    return res.status(401).json({ error: 'Invalid credentials.' });
+  }
+  req.session.user = { username, role: user.role };
+  logLogin(username, req.ip);
+  res.json({ message: 'Login successful.', role: user.role });
+});
 
-  if (!username || !password) return res.status(400).json({ error: 'Missing username or password' });
+// Logout
+app.post('/logout', (req, res) => {
+  req.session.destroy(() => res.json({ message: 'Logged out.' }));
+});
 
-  if (username === process.env.ADMIN_USERNAME) {
-    if (password === process.env.ADMIN_PASSWORD) {
-      req.session.user = { username, role: 'admin' };
-      addLog(username, ip);
-      return res.json({ success: true, role: 'admin' });
-    } else {
-      return res.status(401).json({ error: 'Invalid admin credentials' });
-    }
+// Chat get
+app.get('/chat', (req, res) => {
+  if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
+  res.json(loadChat());
+});
+
+// Chat post
+app.post('/chat', (req, res) => {
+  if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
+  const { message } = req.body;
+  const chat = loadChat();
+  chat.push({ user: req.session.user.username, message, timestamp: Date.now() });
+  saveChat(chat);
+  res.json({ message: 'Message sent.' });
+});
+
+// Logs (admin only)
+app.get('/logs', (req, res) => {
+  if (!req.session.user || req.session.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const logs = JSON.parse(fs.readFileSync(LOGS_FILE));
+  res.json(logs);
+});
+
+// File upload
+app.post('/upload', (req, res) => {
+  if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
+  if (!req.files || !req.files.file) {
+    return res.status(400).json({ error: 'No file uploaded.' });
   }
 
-  const users = loadUsers();
-  const user = users.find(u => u.username === username && u.password === password);
-  if (!user) return res.status(401).json({ error: 'Invalid username or password' });
+  const uploadPath = path.join(__dirname, 'uploads');
+  if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath);
 
-  req.session.user = { username: user.username, role: 'user' };
-  addLog(username, ip);
-  res.json({ success: true, role: 'user' });
-});
-
-app.post('/logout', authRequired, (req, res) => {
-  req.session.destroy(() => {
-    res.json({ success: true });
+  const file = req.files.file;
+  const filePath = path.join(uploadPath, file.name);
+  file.mv(filePath, err => {
+    if (err) return res.status(500).json({ error: 'File upload failed.' });
+    res.json({ message: 'File uploaded successfully.' });
   });
 });
 
-// In-memory chat
-const chatMessages = [];
-
-app.get('/chat', authRequired, (req, res) => {
-  res.json(chatMessages);
-});
-
-app.post('/chat', authRequired, (req, res) => {
-  const { message } = req.body;
-  if (!message) return res.status(400).json({ error: 'No message' });
-
-  chatMessages.push({
-    user: req.session.user.username,
-    message,
-    timestamp: new Date().toISOString()
-  });
-
-  res.json({ success: true });
-});
-
-app.post('/upload', authRequired, (req, res) => {
-  res.json({ success: true, message: 'Upload endpoint placeholder' });
-});
-
-app.get('/logs', adminRequired, (req, res) => {
-  res.json(loadLogs());
-});
-
-// Serve frontend (index.html in public/)
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// --- WebSocket Setup ---
-const wss = new WebSocket.Server({ server });
-
-let clients = [];
-
-wss.on('connection', (ws) => {
-  clients.push(ws);
-  console.log('Client connected. Total clients:', clients.length);
-
-  ws.on('message', (message) => {
-    console.log('Received:', message);
-
-    // Broadcast to others
-    clients.forEach(client => {
-      if (client !== ws && client.readyState === WebSocket.OPEN) {
-        client.send(message);
-      }
-    });
-  });
-
-  ws.on('close', () => {
-    clients = clients.filter(c => c !== ws);
-    console.log('Client disconnected. Total clients:', clients.length);
-  });
-
-  ws.on('error', (error) => {
-    console.error('WebSocket error:', error);
-  });
-});
-
-server.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+// Start server
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });

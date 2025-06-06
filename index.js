@@ -4,6 +4,7 @@ const fileUpload = require('express-fileupload');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const sharp = require('sharp');
 require('dotenv').config();
 
 const app = express();
@@ -15,12 +16,17 @@ app.use(cors({
   credentials: true,
 }));
 
-//Public file
+// Public files
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Middleware
 app.use(express.json());
-app.use(fileUpload());
+
+// Increase default upload limits for chat files (125 MB)
+app.use(fileUpload({
+  limits: { fileSize: 125 * 1024 * 1024 },
+}));
+
 app.use(session({
   secret: process.env.SESSION_SECRET || 'default-secret',
   resave: false,
@@ -42,7 +48,6 @@ const SUPER_LOG_FILE = path.join(CONFIG_DIR, 'superlog.json'); // For superadmin
 const CHAT_FILE = path.join(CONFIG_DIR, 'chat.json');
 const SUPERADMIN_FILE = path.join(CONFIG_DIR, 'superadmin.json');
 
-// Ensure config dir/files exist
 if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR);
 if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, '{}');
 if (!fs.existsSync(LOGS_FILE)) fs.writeFileSync(LOGS_FILE, '[]');
@@ -118,14 +123,12 @@ app.post('/login', (req, res) => {
   const users = loadUsers();
   const ip = getIP(req);
 
-  // Superadmin login
   if (username === superadmin.username && password === superadmin.password) {
     req.session.user = { username, role: 'superadmin' };
     logEvent(username, ip, 'superadmin_login', SUPER_LOG_FILE);
     return res.json({ message: 'Superadmin login successful', role: 'superadmin' });
   }
 
-  // Admins from .env
   if (process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD &&
       username === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
     req.session.user = { username, role: 'admin' };
@@ -133,7 +136,6 @@ app.post('/login', (req, res) => {
     return res.json({ message: 'Admin login successful', role: 'admin' });
   }
 
-  // Regular users
   const user = users[username];
   if (!user || user.password !== password)
     return res.status(401).json({ error: 'Invalid credentials' });
@@ -147,7 +149,6 @@ app.post('/logout', (req, res) => {
   req.session.destroy(() => res.json({ message: 'Logged out.' }));
 });
 
-// Get logs
 app.get('/logs', (req, res) => {
   const user = req.session.user;
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
@@ -163,7 +164,6 @@ app.get('/logs', (req, res) => {
   res.status(403).json({ error: 'Forbidden' });
 });
 
-// Chat system
 app.get('/chat', (req, res) => {
   if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
   const messages = loadChat();
@@ -188,52 +188,38 @@ app.post('/chat', (req, res) => {
   res.json({ message: 'Message posted.' });
 });
 
-// Upload avatar (all types allowed), max 10MB
-app.post('/upload-avatar', (req, res) => {
+// Upload profile picture: any image type, max 10MB, resize + blur 64x64 PNG
+app.post('/upload', (req, res) => {
   if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
-  if (!req.files || !req.files.file) return res.status(400).json({ error: 'No file uploaded.' });
+  if (!req.files || !req.files.image) return res.status(400).json({ error: 'No file uploaded.' });
 
-  const file = req.files.file;
-  if (file.size > 10 * 1024 * 1024) return res.status(400).json({ error: 'File too large (max 10MB).' });
+  const file = req.files.image;
+  if (file.size > 10 * 1024 * 1024) // 10 MB max for profile pic
+    return res.status(400).json({ error: 'File too large (max 10MB).' });
 
-  const uploadPath = path.join(__dirname, 'uploads', 'avatars');
-  if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath, { recursive: true });
+  const uploadPath = path.join(__dirname, 'uploads');
+  if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath);
 
-  const ext = path.extname(file.name) || '.bin'; // fallback ext
-  const filePath = path.join(uploadPath, `${req.session.user.username}${ext}`);
+  const outputPath = path.join(uploadPath, `${req.session.user.username}.png`);
 
-  file.mv(filePath, err => {
-    if (err) return res.status(500).json({ error: 'Upload failed.' });
-    res.json({ message: 'Avatar uploaded successfully.' });
-  });
-});
-
-// Upload chat files (all types allowed), max 125MB
-app.post('/upload-chat-file', (req, res) => {
-  if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
-  if (!req.files || !req.files.file) return res.status(400).json({ error: 'No file uploaded.' });
-
-  const file = req.files.file;
-  if (file.size > 125 * 1024 * 1024) return res.status(400).json({ error: 'File too large (max 125MB).' });
-
-  const uploadPath = path.join(__dirname, 'uploads', 'chat-files');
-  if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath, { recursive: true });
-
-  // Use timestamp + username + original filename to avoid conflicts
-  const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-  const filePath = path.join(uploadPath, `${Date.now()}_${req.session.user.username}_${safeName}`);
-
-  file.mv(filePath, err => {
-    if (err) return res.status(500).json({ error: 'Upload failed.' });
-    res.json({ message: 'Chat file uploaded successfully.', filename: filePath });
-  });
+  sharp(file.data)
+    .resize(64, 64, { fit: 'inside' })
+    .blur(0.5)
+    .png()
+    .toFile(outputPath)
+    .then(() => {
+      res.json({ message: 'Upload and resize successful.' });
+    })
+    .catch(err => {
+      console.error(err);
+      res.status(500).json({ error: 'Image processing failed.' });
+    });
 });
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Start
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server running on port ${PORT}`);
 });

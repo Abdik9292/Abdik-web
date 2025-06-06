@@ -55,6 +55,9 @@
 </div>
 
 <script>
+  // Base API URL
+  const API_BASE = 'https://abdik-web-production.up.railway.app';
+
   const authSection = document.getElementById('auth-section');
   const mainSection = document.getElementById('main-section');
   const adminSection = document.getElementById('admin-section');
@@ -72,9 +75,10 @@
     const password = document.getElementById('reg-password').value.trim();
 
     try {
-      const res = await fetch('/register', {
+      const res = await fetch(`${API_BASE}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ username, password }),
       });
       const data = await res.json();
@@ -97,9 +101,10 @@
     const password = document.getElementById('login-password').value.trim();
 
     try {
-      const res = await fetch('/login', {
+      const res = await fetch(`${API_BASE}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ username, password }),
       });
       const data = await res.json();
@@ -116,7 +121,7 @@
 
   // Logout
   document.getElementById('logout-btn').addEventListener('click', async () => {
-    await fetch('/logout', { method: 'POST' });
+    await fetch(`${API_BASE}/logout`, { method: 'POST', credentials: 'include' });
     currentRole = null;
     mainSection.classList.add('hidden');
     adminSection.classList.add('hidden');
@@ -140,7 +145,7 @@
 
   // Load chat messages
   async function loadChat() {
-    const res = await fetch('/chat');
+    const res = await fetch(`${API_BASE}/chat`, { credentials: 'include' });
     if (!res.ok) return;
     const messages = await res.json();
     chatBox.innerHTML = '';
@@ -157,9 +162,10 @@
     e.preventDefault();
     const msgInput = document.getElementById('chat-input');
     if (!msgInput.value.trim()) return;
-    const res = await fetch('/chat', {
+    const res = await fetch(`${API_BASE}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ message: msgInput.value.trim() }),
     });
     if (res.ok) {
@@ -180,8 +186,9 @@
     formData.append('file', fileInput.files[0]);
 
     try {
-      const res = await fetch('/upload', {
+      const res = await fetch(`${API_BASE}/upload`, {
         method: 'POST',
+        credentials: 'include',
         body: formData,
       });
       if (res.ok) {
@@ -197,7 +204,7 @@
 
   // Load admin logs
   async function loadLogs() {
-    const res = await fetch('/logs');
+    const res = await fetch(`${API_BASE}/logs`, { credentials: 'include' });
     if (!res.ok) return;
     const logs = await res.json();
     logsBox.innerHTML = '';

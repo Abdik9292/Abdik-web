@@ -4,6 +4,7 @@ const fileUpload = require('express-fileupload');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const sharp = require('sharp');
 require('dotenv').config();
 
 const app = express();
@@ -15,19 +16,23 @@ app.use(cors({
   credentials: true,
 }));
 
-//Public file
+// Public file + uploads folder
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Middleware
 app.use(express.json());
-app.use(fileUpload());
+app.use(fileUpload({
+  limits: { fileSize: 500 * 1024 }, // limit 500 KB per file
+  abortOnLimit: true,
+}));
 app.use(session({
   secret: process.env.SESSION_SECRET || 'default-secret',
   resave: false,
   saveUninitialized: true,
   cookie: {
-    secure: false,
-    sameSite: 'none'
+    secure: false, // set true if HTTPS
+    sameSite: 'lax', // relax for local dev and GitHub pages
   }
 }));
 
@@ -41,6 +46,7 @@ const LOGS_FILE = path.join(CONFIG_DIR, 'log.json'); // For admin
 const SUPER_LOG_FILE = path.join(CONFIG_DIR, 'superlog.json'); // For superadmin
 const CHAT_FILE = path.join(CONFIG_DIR, 'chat.json');
 const SUPERADMIN_FILE = path.join(CONFIG_DIR, 'superadmin.json');
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
 // Ensure config dir/files exist
 if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR);
@@ -55,6 +61,7 @@ if (!fs.existsSync(SUPERADMIN_FILE)) {
     publicInfo: 'This is the Superadmin.'
   }));
 }
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR);
 
 // Helpers
 function loadUsers() {
@@ -188,25 +195,39 @@ app.post('/chat', (req, res) => {
   res.json({ message: 'Message posted.' });
 });
 
-// Upload PNG avatar
-app.post('/upload', (req, res) => {
+// Upload avatar (any image type, resized, saved as PNG)
+app.post('/upload', async (req, res) => {
   if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
   if (!req.files || !req.files.image) return res.status(400).json({ error: 'No file uploaded.' });
 
   const file = req.files.image;
-  if (!file.mimetype.includes('png')) return res.status(400).json({ error: 'Only PNG allowed.' });
-  if (file.size > 100 * 1024) return res.status(400).json({ error: 'File too large (max 100KB).' });
 
-  const uploadPath = path.join(__dirname, 'uploads');
-  if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath);
+  // Accept common image types only
+  const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
+  if (!allowedTypes.includes(file.mimetype)) {
+    return res.status(400).json({ error: 'Only PNG, JPG, GIF, WEBP images allowed.' });
+  }
+  if (file.size > 500 * 1024) {
+    return res.status(400).json({ error: 'File too large (max 500KB).' });
+  }
 
-  const filePath = path.join(uploadPath, `${req.session.user.username}.png`);
-  file.mv(filePath, err => {
-    if (err) return res.status(500).json({ error: 'Upload failed.' });
+  const uploadPath = path.join(UPLOADS_DIR, `${req.session.user.username}.png`);
+
+  try {
+    // Resize and convert to PNG (128x128) using sharp
+    await sharp(file.data)
+      .resize(128, 128, { fit: 'cover' })
+      .png()
+      .toFile(uploadPath);
+
     res.json({ message: 'Upload successful.' });
-  });
+  } catch (err) {
+    console.error('Image processing error:', err);
+    res.status(500).json({ error: 'Failed to process image.' });
+  }
 });
 
+// Serve frontend app
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -215,4 +236,3 @@ app.get('*', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
-

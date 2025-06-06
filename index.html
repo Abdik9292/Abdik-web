@@ -34,6 +34,7 @@
 
 <div id="main-section" class="hidden">
   <button id="logout-btn">Logout</button>
+
   <h2>Chat</h2>
   <div id="chat-box"></div>
   <form id="chat-form">
@@ -42,8 +43,8 @@
   </form>
 
   <h2>Upload</h2>
-  <form id="upload-form">
-    <input type="file" id="upload-file" /><br />
+  <form id="upload-form" enctype="multipart/form-data">
+    <input type="file" id="upload-file" name="file" /><br />
     <button type="submit">Upload</button>
   </form>
 
@@ -137,7 +138,7 @@
     loadChat();
   }
 
-  // Chat load
+  // Load chat messages
   async function loadChat() {
     const res = await fetch('/chat');
     if (!res.ok) return;
@@ -151,7 +152,7 @@
     chatBox.scrollTop = chatBox.scrollHeight;
   }
 
-  // Chat send
+  // Send chat message
   document.getElementById('chat-form').addEventListener('submit', async e => {
     e.preventDefault();
     const msgInput = document.getElementById('chat-input');
@@ -167,10 +168,31 @@
     }
   });
 
-  // Upload (placeholder)
+  // Upload file
   document.getElementById('upload-form').addEventListener('submit', async e => {
     e.preventDefault();
-    alert('Upload endpoint placeholder - add server upload logic');
+    const fileInput = document.getElementById('upload-file');
+    if (fileInput.files.length === 0) {
+      alert('Please select a file to upload.');
+      return;
+    }
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+
+    try {
+      const res = await fetch('/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (res.ok) {
+        alert('File uploaded successfully.');
+        fileInput.value = '';
+      } else {
+        alert('File upload failed.');
+      }
+    } catch {
+      alert('Error uploading file.');
+    }
   });
 
   // Load admin logs
@@ -181,7 +203,7 @@
     logsBox.innerHTML = '';
     logs.forEach(l => {
       const div = document.createElement('div');
-      div.textContent = `${l.timestamp} - ${l.username} - IP: ${l.ip}`;
+      div.textContent = `${new Date(l.timestamp).toLocaleString()} - ${l.username} - IP: ${l.ip}`;
       logsBox.appendChild(div);
     });
   }

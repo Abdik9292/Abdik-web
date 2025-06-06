@@ -207,6 +207,10 @@ app.post('/upload', (req, res) => {
   });
 });
 
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // Start
 app.listen(PORT, () => {
   console.log(`✅ Server running on Railway: http://localhost:${PORT}`);

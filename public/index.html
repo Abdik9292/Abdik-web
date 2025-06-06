@@ -55,7 +55,6 @@
 </div>
 
 <script>
-  // Base API URL
   const API_BASE = 'https://abdik-web-production.up.railway.app';
 
   const authSection = document.getElementById('auth-section');
@@ -67,7 +66,7 @@
 
   let currentRole = null;
 
-  // Register
+  // Register handler
   document.getElementById('register-form').addEventListener('submit', async e => {
     e.preventDefault();
     authMsg.textContent = '';
@@ -86,14 +85,14 @@
         currentRole = 'user';
         showMainUI();
       } else {
-        authMsg.textContent = data.error;
+        authMsg.textContent = data.error || 'Registration failed';
       }
     } catch (err) {
       authMsg.textContent = 'Error connecting to server.';
     }
   });
 
-  // Login
+  // Login handler
   document.getElementById('login-form').addEventListener('submit', async e => {
     e.preventDefault();
     authMsg.textContent = '';
@@ -112,14 +111,14 @@
         currentRole = data.role;
         showMainUI();
       } else {
-        authMsg.textContent = data.error;
+        authMsg.textContent = data.error || 'Login failed';
       }
     } catch {
       authMsg.textContent = 'Error connecting to server.';
     }
   });
 
-  // Logout
+  // Logout handler
   document.getElementById('logout-btn').addEventListener('click', async () => {
     await fetch(`${API_BASE}/logout`, { method: 'POST', credentials: 'include' });
     currentRole = null;
@@ -130,7 +129,7 @@
     logsBox.innerHTML = '';
   });
 
-  // Show main UI based on role
+  // Show main UI depending on role
   function showMainUI() {
     authSection.classList.add('hidden');
     mainSection.classList.remove('hidden');
@@ -145,16 +144,20 @@
 
   // Load chat messages
   async function loadChat() {
-    const res = await fetch(`${API_BASE}/chat`, { credentials: 'include' });
-    if (!res.ok) return;
-    const messages = await res.json();
-    chatBox.innerHTML = '';
-    messages.forEach(m => {
-      const div = document.createElement('div');
-      div.textContent = `[${new Date(m.timestamp).toLocaleTimeString()}] ${m.user}: ${m.message}`;
-      chatBox.appendChild(div);
-    });
-    chatBox.scrollTop = chatBox.scrollHeight;
+    try {
+      const res = await fetch(`${API_BASE}/chat`, { credentials: 'include' });
+      if (!res.ok) return;
+      const messages = await res.json();
+      chatBox.innerHTML = '';
+      messages.forEach(m => {
+        const div = document.createElement('div');
+        div.textContent = `[${new Date(m.timestamp).toLocaleTimeString()}] ${m.user}: ${m.message}`;
+        chatBox.appendChild(div);
+      });
+      chatBox.scrollTop = chatBox.scrollHeight;
+    } catch {
+      // fail silently
+    }
   }
 
   // Send chat message
@@ -162,19 +165,23 @@
     e.preventDefault();
     const msgInput = document.getElementById('chat-input');
     if (!msgInput.value.trim()) return;
-    const res = await fetch(`${API_BASE}/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ message: msgInput.value.trim() }),
-    });
-    if (res.ok) {
-      msgInput.value = '';
-      loadChat();
+    try {
+      const res = await fetch(`${API_BASE}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ message: msgInput.value.trim() }),
+      });
+      if (res.ok) {
+        msgInput.value = '';
+        loadChat();
+      }
+    } catch {
+      // fail silently
     }
   });
 
-  // Upload file
+  // Upload file handler
   document.getElementById('upload-form').addEventListener('submit', async e => {
     e.preventDefault();
     const fileInput = document.getElementById('upload-file');
@@ -204,15 +211,19 @@
 
   // Load admin logs
   async function loadLogs() {
-    const res = await fetch(`${API_BASE}/logs`, { credentials: 'include' });
-    if (!res.ok) return;
-    const logs = await res.json();
-    logsBox.innerHTML = '';
-    logs.forEach(l => {
-      const div = document.createElement('div');
-      div.textContent = `${new Date(l.timestamp).toLocaleString()} - ${l.username} - IP: ${l.ip}`;
-      logsBox.appendChild(div);
-    });
+    try {
+      const res = await fetch(`${API_BASE}/logs`, { credentials: 'include' });
+      if (!res.ok) return;
+      const logs = await res.json();
+      logsBox.innerHTML = '';
+      logs.forEach(l => {
+        const div = document.createElement('div');
+        div.textContent = `${new Date(l.timestamp).toLocaleString()} - ${l.username} - IP: ${l.ip}`;
+        logsBox.appendChild(div);
+      });
+    } catch {
+      // fail silently
+    }
   }
 </script>
 

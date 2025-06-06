@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 
 // CORS: allow GitHub frontend
 app.use(cors({
-  origin: 'https://abdik9292.github.io',
+  origin: 'https://abdik9292.github.io/Abdik-web/',
   credentials: true,
 }));
 

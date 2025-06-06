@@ -2,176 +2,204 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>User Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>User Panel System</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; }
-    #chat-box, #logs-box {
-      border: 1px solid #ccc;
-      height: 200px;
-      overflow-y: scroll;
-      padding: 5px;
-      margin-bottom: 10px;
-      white-space: pre-wrap;
-      background: #f9f9f9;
+    body {
+      font-family: sans-serif;
+      background: #1e1e2f;
+      color: #f0f0f0;
+      margin: 0;
+      padding: 1rem;
     }
     .hidden { display: none; }
-    .error { color: red; }
-    .success { color: green; }
+    .panel {
+      background: #2c2c3e;
+      border-radius: 8px;
+      padding: 1rem;
+      max-width: 600px;
+      margin: 2rem auto;
+    }
+    input, button, textarea {
+      width: 100%;
+      padding: 0.5rem;
+      margin: 0.5rem 0;
+      border-radius: 4px;
+      border: none;
+    }
+    button { background: #4CAF50; color: white; cursor: pointer; }
+    button:hover { background: #45a049; }
+    .chat-box { max-height: 200px; overflow-y: auto; background: #1a1a2b; padding: 1rem; margin-bottom: 1rem; border-radius: 5px; }
+    .chat-message { margin-bottom: 0.5rem; }
+    .chat-message strong { color: #64d8cb; }
+    #avatar-preview { width: 64px; height: 64px; object-fit: cover; margin-top: 1rem; border-radius: 50%; }
   </style>
 </head>
 <body>
 
-<h1>Welcome</h1>
-
-<div id="auth-section">
+<div class="panel" id="login-panel">
   <h2>Login</h2>
-  <form id="login-form">
-    <input type="text" id="login-username" placeholder="Username" required /><br />
-    <input type="password" id="login-password" placeholder="Password" required /><br />
-    <button type="submit">Login</button>
-  </form>
-  <p><a href="#" id="show-register">Register</a></p>
-
-  <div id="register-section" class="hidden">
-    <h2>Register</h2>
-    <form id="register-form">
-      <input type="text" id="reg-username" placeholder="Username" required /><br />
-      <input type="password" id="reg-password" placeholder="Password" required /><br />
-      <button type="submit">Register</button>
-    </form>
-  </div>
-
-  <div id="auth-msg" class="error"></div>
+  <input type="text" id="login-username" placeholder="Username" />
+  <input type="password" id="login-password" placeholder="Password" />
+  <button onclick="login()">Login</button>
+  <p>Don't have an account? <a href="#" onclick="showRegister()">Register here</a></p>
 </div>
 
-<div id="main-section" class="hidden">
-  <button id="logout-btn">Logout</button>
+<div class="panel hidden" id="register-panel">
+  <h2>Register</h2>
+  <input type="text" id="reg-username" placeholder="Username (3–16 chars)" />
+  <input type="password" id="reg-password" placeholder="Password (min 8 chars)" />
+  <button onclick="register()">Register</button>
+  <p>Already have an account? <a href="#" onclick="showLogin()">Back to login</a></p>
+</div>
 
-  <h2>Upload Profile PNG</h2>
-  <form id="upload-form" enctype="multipart/form-data">
-    <input type="file" name="file" accept="image/png" required />
-    <button type="submit">Upload</button>
-  </form>
+<div class="panel hidden" id="user-panel">
+  <h2 id="welcome"></h2>
+  <div id="chat-section">
+    <h3>Chat</h3>
+    <div class="chat-box" id="chat-box"></div>
+    <textarea id="chat-input" placeholder="Write a message..."></textarea>
+    <button onclick="sendMessage()">Send</button>
+  </div>
 
-  <h2>Chat</h2>
-  <div id="chat-box"></div>
-  <form id="chat-form">
-    <input type="text" id="chat-input" placeholder="Type a message" required />
-    <button type="submit">Send</button>
-  </form>
+  <div>
+    <h3>Upload Profile Icon (PNG, &lt;100KB)</h3>
+    <input type="file" id="avatar" accept="image/png" />
+    <button onclick="uploadAvatar()">Upload</button>
+    <img id="avatar-preview" class="hidden" />
+  </div>
 
   <div id="logs-section" class="hidden">
-    <h2>Login Logs</h2>
-    <div id="logs-box"></div>
+    <h3>Login Logs</h3>
+    <pre id="log-output"></pre>
   </div>
+
+  <button onclick="logout()">Logout</button>
 </div>
 
 <script>
-let currentRole = null;
+const API = 'https://abdik-web-production.up.railway.app';
 
-document.getElementById('show-register').onclick = () => {
-  document.getElementById('register-section').classList.toggle('hidden');
-};
-
-document.getElementById('register-form').onsubmit = async (e) => {
-  e.preventDefault();
-  const username = document.getElementById('reg-username').value;
-  const password = document.getElementById('reg-password').value;
-  const res = await fetch('/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password })
-  });
-  const data = await res.json();
-  if (res.ok) {
-    showMain(data.role);
-  } else {
-    document.getElementById('auth-msg').textContent = data.error;
-  }
-};
-
-document.getElementById('login-form').onsubmit = async (e) => {
-  e.preventDefault();
-  const username = document.getElementById('login-username').value;
-  const password = document.getElementById('login-password').value;
-  const res = await fetch('/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password })
-  });
-  const data = await res.json();
-  if (res.ok) {
-    showMain(data.role);
-  } else {
-    document.getElementById('auth-msg').textContent = data.error;
-  }
-};
-
-document.getElementById('logout-btn').onclick = async () => {
-  await fetch('/logout', { method: 'POST' });
-  location.reload();
-};
-
-function showMain(role) {
-  currentRole = role;
-  document.getElementById('auth-section').classList.add('hidden');
-  document.getElementById('main-section').classList.remove('hidden');
-  if (role === 'admin' || role === 'superadmin') {
-    document.getElementById('logs-section').classList.remove('hidden');
-    loadLogs();
-  }
-  loadChat();
-  setInterval(loadChat, 5000);
+function showLogin() {
+  document.getElementById('login-panel').classList.remove('hidden');
+  document.getElementById('register-panel').classList.add('hidden');
 }
 
-document.getElementById('chat-form').onsubmit = async (e) => {
-  e.preventDefault();
-  const message = document.getElementById('chat-input').value;
-  await fetch('/chat', {
+function showRegister() {
+  document.getElementById('login-panel').classList.add('hidden');
+  document.getElementById('register-panel').classList.remove('hidden');
+}
+
+function showUserPanel(role) {
+  document.getElementById('login-panel').classList.add('hidden');
+  document.getElementById('register-panel').classList.add('hidden');
+  document.getElementById('user-panel').classList.remove('hidden');
+  document.getElementById('logs-section').classList.toggle('hidden', role === 'user');
+  loadChat();
+  if (role !== 'user') loadLogs();
+}
+
+async function login() {
+  const username = document.getElementById('login-username').value;
+  const password = document.getElementById('login-password').value;
+  const res = await fetch(`${API}/login`, {
     method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+
+  const data = await res.json();
+  if (res.ok) {
+    document.getElementById('welcome').textContent = `Welcome, ${username} (${data.role})`;
+    showUserPanel(data.role);
+  } else {
+    alert(data.error || 'Login failed.');
+  }
+}
+
+async function register() {
+  const username = document.getElementById('reg-username').value;
+  const password = document.getElementById('reg-password').value;
+  const res = await fetch(`${API}/register`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+
+  const data = await res.json();
+  if (res.ok) {
+    alert('Registered successfully. You are now logged in.');
+    document.getElementById('welcome').textContent = `Welcome, ${username} (user)`;
+    showUserPanel('user');
+  } else {
+    alert(data.error || 'Registration failed.');
+  }
+}
+
+async function logout() {
+  await fetch(`${API}/logout`, { method: 'POST', credentials: 'include' });
+  location.reload();
+}
+
+async function loadChat() {
+  const res = await fetch(`${API}/chat`, { credentials: 'include' });
+  if (!res.ok) return;
+  const chat = await res.json();
+  const box = document.getElementById('chat-box');
+  box.innerHTML = '';
+  chat.forEach(msg => {
+    const div = document.createElement('div');
+    div.className = 'chat-message';
+    div.innerHTML = `<strong>${msg.user}</strong>: ${msg.message}`;
+    box.appendChild(div);
+  });
+}
+
+async function sendMessage() {
+  const message = document.getElementById('chat-input').value.trim();
+  if (!message) return;
+  await fetch(`${API}/chat`, {
+    method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message })
   });
   document.getElementById('chat-input').value = '';
   loadChat();
-};
-
-async function loadChat() {
-  const res = await fetch('/chat');
-  if (!res.ok) return;
-  const chat = await res.json();
-  const chatBox = document.getElementById('chat-box');
-  chatBox.innerHTML = '';
-  chat.forEach(entry => {
-    const date = new Date(entry.timestamp);
-    chatBox.innerHTML += `[${date.toLocaleTimeString()}] ${entry.user}: ${entry.message}\n`;
-  });
-  chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 async function loadLogs() {
-  const res = await fetch('/logs');
+  const res = await fetch(`${API}/logs`, { credentials: 'include' });
   if (!res.ok) return;
   const logs = await res.json();
-  const logBox = document.getElementById('logs-box');
-  logBox.innerHTML = '';
-  logs.forEach(entry => {
-    logBox.innerHTML += `${entry.timestamp} - ${entry.username} (${entry.role}) from IP: ${entry.ip}\n`;
-  });
+  document.getElementById('log-output').textContent = JSON.stringify(logs, null, 2);
 }
 
-document.getElementById('upload-form').onsubmit = async (e) => {
-  e.preventDefault();
-  const formData = new FormData(document.getElementById('upload-form'));
-  const res = await fetch('/upload', {
-    method: 'POST',
-    body: formData
-  });
-  const data = await res.json();
-  alert(data.message || data.error);
-};
-</script>
+async function uploadAvatar() {
+  const input = document.getElementById('avatar');
+  if (!input.files.length) return alert('Choose a PNG file.');
+  const file = input.files[0];
+  const form = new FormData();
+  form.append('image', file);
 
+  const res = await fetch(`${API}/upload`, {
+    method: 'POST',
+    credentials: 'include',
+    body: form
+  });
+
+  const data = await res.json();
+  if (res.ok) {
+    const preview = document.getElementById('avatar-preview');
+    preview.src = URL.createObjectURL(file);
+    preview.classList.remove('hidden');
+    alert('Uploaded!');
+  } else {
+    alert(data.error || 'Upload failed.');
+  }
+}
+</script>
 </body>
 </html>

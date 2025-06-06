@@ -1,1 +1,4 @@
-
+# Ignore config files and environment variables
+config/
+.env
+node_modules/

@@ -3,269 +3,188 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Login/Register Chat Upload</title>
+<title>Chat & Upload with Admin</title>
 <style>
-  body { font-family: Arial, sans-serif; max-width: 600px; margin: auto; }
-  #chat, #upload, #logs { display: none; margin-top: 20px; border: 1px solid #ccc; padding: 10px; }
-  #logs { max-height: 150px; overflow-y: auto; background: #eee; }
+  body { font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; }
+  #chat-box { border: 1px solid #ccc; height: 200px; overflow-y: scroll; padding: 5px; margin-bottom: 10px; }
+  #logs-box { border: 1px solid #f00; height: 150px; overflow-y: scroll; padding: 5px; margin-top: 10px; background: #ffe6e6; }
   .hidden { display: none; }
-  input, button { padding: 8px; margin: 5px 0; width: 100%; }
-  button { cursor: pointer; }
 </style>
 </head>
 <body>
 
-<h1>Login / Register</h1>
+<h1>Welcome</h1>
 
 <div id="auth-section">
-  <input type="text" id="username" placeholder="Username" />
-  <input type="password" id="password" placeholder="Password" />
-  <button id="login-btn">Login</button>
-  <button id="register-btn">Register</button>
-  <p id="auth-message" style="color:red;"></p>
+  <h2>Register (Users Only)</h2>
+  <form id="register-form">
+    <input type="text" id="reg-username" placeholder="Username" required /><br />
+    <input type="password" id="reg-password" placeholder="Password" required /><br />
+    <button type="submit">Register</button>
+  </form>
+
+  <h2>Login</h2>
+  <form id="login-form">
+    <input type="text" id="login-username" placeholder="Username" required /><br />
+    <input type="password" id="login-password" placeholder="Password" required /><br />
+    <button type="submit">Login</button>
+  </form>
+  <div id="auth-msg" style="color:red;"></div>
 </div>
 
-<div id="user-section" class="hidden">
-  <h2>Welcome, <span id="display-username"></span>!</h2>
+<div id="main-section" class="hidden">
   <button id="logout-btn">Logout</button>
-</div>
+  <h2>Chat</h2>
+  <div id="chat-box"></div>
+  <form id="chat-form">
+    <input type="text" id="chat-input" placeholder="Type message..." required />
+    <button type="submit">Send</button>
+  </form>
 
-<div id="chat-upload-section" class="hidden">
-  <div id="chat">
-    <h3>Chat</h3>
-    <div id="chat-messages" style="height: 150px; overflow-y: auto; border: 1px solid #ddd; padding: 5px;"></div>
-    <input type="text" id="chat-input" placeholder="Type message..." />
-    <button id="send-chat-btn">Send</button>
+  <h2>Upload</h2>
+  <form id="upload-form">
+    <input type="file" id="upload-file" /><br />
+    <button type="submit">Upload</button>
+  </form>
+
+  <div id="admin-section" class="hidden">
+    <h2>Login Logs (Admin Only)</h2>
+    <div id="logs-box"></div>
   </div>
-
-  <div id="upload">
-    <h3>Upload File</h3>
-    <input type="file" id="file-upload" />
-    <button id="upload-btn">Upload</button>
-    <p id="upload-message" style="color:green;"></p>
-  </div>
-</div>
-
-<div id="logs" class="hidden">
-  <h3>Login Logs (Admin Only)</h3>
-  <div id="log-entries"></div>
 </div>
 
 <script>
-const loginBtn = document.getElementById("login-btn");
-const registerBtn = document.getElementById("register-btn");
-const logoutBtn = document.getElementById("logout-btn");
-const authMessage = document.getElementById("auth-message");
-const usernameInput = document.getElementById("username");
-const passwordInput = document.getElementById("password");
+  const authSection = document.getElementById('auth-section');
+  const mainSection = document.getElementById('main-section');
+  const adminSection = document.getElementById('admin-section');
+  const authMsg = document.getElementById('auth-msg');
+  const chatBox = document.getElementById('chat-box');
+  const logsBox = document.getElementById('logs-box');
 
-const authSection = document.getElementById("auth-section");
-const userSection = document.getElementById("user-section");
-const chatUploadSection = document.getElementById("chat-upload-section");
-const logsSection = document.getElementById("logs");
+  let currentRole = null;
 
-const displayUsername = document.getElementById("display-username");
+  // Register
+  document.getElementById('register-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    authMsg.textContent = '';
+    const username = document.getElementById('reg-username').value.trim();
+    const password = document.getElementById('reg-password').value.trim();
 
-const chatMessages = document.getElementById("chat-messages");
-const chatInput = document.getElementById("chat-input");
-const sendChatBtn = document.getElementById("send-chat-btn");
-
-const fileUploadInput = document.getElementById("file-upload");
-const uploadBtn = document.getElementById("upload-btn");
-const uploadMessage = document.getElementById("upload-message");
-
-const logEntries = document.getElementById("log-entries");
-
-let currentUser = null;
-let currentRole = null;
-
-// Helper to show/hide UI sections
-function setLoggedInUI(username, role) {
-  currentUser = username;
-  currentRole = role;
-  displayUsername.textContent = username;
-  authSection.style.display = "none";
-  userSection.classList.remove("hidden");
-  chatUploadSection.classList.remove("hidden");
-  logoutBtn.style.display = "inline-block";
-
-  if(role === "admin") {
-    logsSection.classList.remove("hidden");
-    fetchLogs();
-  } else {
-    logsSection.classList.add("hidden");
-  }
-}
-
-function logout() {
-  currentUser = null;
-  currentRole = null;
-  displayUsername.textContent = "";
-  authSection.style.display = "block";
-  userSection.classList.add("hidden");
-  chatUploadSection.classList.add("hidden");
-  logsSection.classList.add("hidden");
-  authMessage.textContent = "";
-  usernameInput.value = "";
-  passwordInput.value = "";
-  chatMessages.innerHTML = "";
-  chatInput.value = "";
-  uploadMessage.textContent = "";
-  logEntries.innerHTML = "";
-}
-
-// Login handler
-loginBtn.addEventListener("click", async () => {
-  const username = usernameInput.value.trim();
-  const password = passwordInput.value;
-  if(!username || !password) {
-    authMessage.textContent = "Please fill username and password";
-    return;
-  }
-  authMessage.textContent = "";
-
-  try {
-    const res = await fetch("/api/login", {
-      method: "POST",
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({username, password})
-    });
-    const data = await res.json();
-    if(data.success) {
-      setLoggedInUI(username, data.role);
-    } else {
-      authMessage.textContent = data.message;
+    try {
+      const res = await fetch('/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        currentRole = 'user';
+        showMainUI();
+      } else {
+        authMsg.textContent = data.error;
+      }
+    } catch (err) {
+      authMsg.textContent = 'Error connecting to server.';
     }
-  } catch(e) {
-    authMessage.textContent = "Server error";
-  }
-});
-
-// Register handler
-registerBtn.addEventListener("click", async () => {
-  const username = usernameInput.value.trim();
-  const password = passwordInput.value;
-  if(!username || !password) {
-    authMessage.textContent = "Please fill username and password";
-    return;
-  }
-  authMessage.textContent = "";
-
-  try {
-    const res = await fetch("/api/register", {
-      method: "POST",
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({username, password})
-    });
-    const data = await res.json();
-    if(data.success) {
-      authMessage.style.color = "green";
-      authMessage.textContent = data.message;
-    } else {
-      authMessage.style.color = "red";
-      authMessage.textContent = data.message;
-    }
-  } catch(e) {
-    authMessage.textContent = "Server error";
-  }
-});
-
-// Logout button
-logoutBtn.addEventListener("click", () => {
-  fetch("/api/logout", { method: "POST" }).finally(() => {
-    logout();
   });
-});
 
-// Send chat message
-sendChatBtn.addEventListener("click", async () => {
-  const message = chatInput.value.trim();
-  if(!message) return;
-  try {
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({message})
+  // Login
+  document.getElementById('login-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    authMsg.textContent = '';
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value.trim();
+
+    try {
+      const res = await fetch('/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        currentRole = data.role;
+        showMainUI();
+      } else {
+        authMsg.textContent = data.error;
+      }
+    } catch {
+      authMsg.textContent = 'Error connecting to server.';
+    }
+  });
+
+  // Logout
+  document.getElementById('logout-btn').addEventListener('click', async () => {
+    await fetch('/logout', { method: 'POST' });
+    currentRole = null;
+    mainSection.classList.add('hidden');
+    adminSection.classList.add('hidden');
+    authSection.classList.remove('hidden');
+    chatBox.innerHTML = '';
+    logsBox.innerHTML = '';
+  });
+
+  // Show main UI based on role
+  function showMainUI() {
+    authSection.classList.add('hidden');
+    mainSection.classList.remove('hidden');
+    if (currentRole === 'admin') {
+      adminSection.classList.remove('hidden');
+      loadLogs();
+    } else {
+      adminSection.classList.add('hidden');
+    }
+    loadChat();
+  }
+
+  // Chat load
+  async function loadChat() {
+    const res = await fetch('/chat');
+    if (!res.ok) return;
+    const messages = await res.json();
+    chatBox.innerHTML = '';
+    messages.forEach(m => {
+      const div = document.createElement('div');
+      div.textContent = `[${new Date(m.timestamp).toLocaleTimeString()}] ${m.user}: ${m.message}`;
+      chatBox.appendChild(div);
     });
-    const data = await res.json();
-    if(data.success) {
-      appendChatMessage(data.message);
-      chatInput.value = "";
-    } else {
-      alert(data.message);
-    }
-  } catch(e) {
-    alert("Server error");
+    chatBox.scrollTop = chatBox.scrollHeight;
   }
-});
 
-// Append chat message to chat window
-function appendChatMessage(message) {
-  const div = document.createElement("div");
-  div.textContent = message;
-  chatMessages.appendChild(div);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-// Upload file
-uploadBtn.addEventListener("click", async () => {
-  if(fileUploadInput.files.length === 0) {
-    uploadMessage.style.color = "red";
-    uploadMessage.textContent = "Select a file first";
-    return;
-  }
-  const file = fileUploadInput.files[0];
-  const formData = new FormData();
-  formData.append("file", file);
-
-  uploadMessage.textContent = "";
-  try {
-    const res = await fetch("/api/upload", {
-      method: "POST",
-      body: formData
+  // Chat send
+  document.getElementById('chat-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msgInput = document.getElementById('chat-input');
+    if (!msgInput.value.trim()) return;
+    const res = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msgInput.value.trim() }),
     });
-    const data = await res.json();
-    if(data.success) {
-      uploadMessage.style.color = "green";
-      uploadMessage.textContent = data.message;
-    } else {
-      uploadMessage.style.color = "red";
-      uploadMessage.textContent = data.message;
+    if (res.ok) {
+      msgInput.value = '';
+      loadChat();
     }
-  } catch(e) {
-    uploadMessage.style.color = "red";
-    uploadMessage.textContent = "Upload failed";
+  });
+
+  // Upload (placeholder)
+  document.getElementById('upload-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    alert('Upload endpoint placeholder - add server upload logic');
+  });
+
+  // Load admin logs
+  async function loadLogs() {
+    const res = await fetch('/logs');
+    if (!res.ok) return;
+    const logs = await res.json();
+    logsBox.innerHTML = '';
+    logs.forEach(l => {
+      const div = document.createElement('div');
+      div.textContent = `${l.timestamp} - ${l.username} - IP: ${l.ip}`;
+      logsBox.appendChild(div);
+    });
   }
-});
-
-// Fetch and display login logs (admin only)
-async function fetchLogs() {
-  try {
-    const res = await fetch("/api/logs");
-    const data = await res.json();
-    if(data.success) {
-      logEntries.innerHTML = data.logs.map(e => `<div>${e}</div>`).join("");
-    } else {
-      logEntries.innerHTML = "<div>No logs available or unauthorized</div>";
-    }
-  } catch {
-    logEntries.innerHTML = "<div>Error loading logs</div>";
-  }
-}
-
-// Auto check login status on page load
-async function checkSession() {
-  try {
-    const res = await fetch("/api/session");
-    const data = await res.json();
-    if(data.loggedIn) {
-      setLoggedInUI(data.username, data.role);
-    }
-  } catch {}
-}
-
-checkSession();
-
 </script>
 
 </body>

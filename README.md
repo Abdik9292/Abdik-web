@@ -1,7 +1,4 @@
 # Abdik-web
-# Abdik-wbserver
-
-[Abdik-wbserver]
 
 Is the server
 

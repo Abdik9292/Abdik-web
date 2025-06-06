@@ -8,77 +8,61 @@ const path = require('path');
 const app = express();
 const PORT = 3000;
 
-// Ensure config directory exists
-const configDir = path.join(__dirname, 'config');
-if (!fs.existsSync(configDir)) {
-  fs.mkdirSync(configDir);
-}
+// Trust proxy settings
+app.set('trust proxy', true);
 
+// Middleware setup
 app.use(express.static('.'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Session config with secret from .env
+// Session configuration
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'fallback-secret',
+  secret: process.env.SESSION_SECRET || 'your-secret-session-key',
   resave: false,
   saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: false, // Set to true if using HTTPS
+    sameSite: 'lax',
+  },
 }));
 
-const USERS_FILE = path.join(configDir, 'users.json');
-const LOGS_FILE = path.join(configDir, 'logs.json');
+const USERS_FILE = path.join(__dirname, 'config', 'users.json');
+const LOGS_FILE = path.join(__dirname, 'config', 'logs.json');
+const CHAT_FILE = path.join(__dirname, 'config', 'chat.json');
 
-// Helper to normalize IP (strip ::ffff: prefix if present)
+// Helper functions
+function loadJSON(filePath) {
+  try {
+    const data = fs.readFileSync(filePath);
+    return JSON.parse(data);
+  } catch {
+    return [];
+  }
+}
+
+function saveJSON(filePath, data) {
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+}
+
 function getClientIP(req) {
-  let ip = req.ip || '';
-  if (ip.startsWith('::ffff:')) {
-    ip = ip.substring(7);
-  }
-  return ip;
+  const ip = req.ip || req.connection.remoteAddress;
+  return ip === '::1' ? '127.0.0.1' : ip;
 }
 
-// Load or initialize users file
-function loadUsers() {
-  try {
-    const data = fs.readFileSync(USERS_FILE);
-    return JSON.parse(data);
-  } catch {
-    return [];
-  }
-}
-
-function saveUsers(users) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-}
-
-// Load or initialize logs file
-function loadLogs() {
-  try {
-    const data = fs.readFileSync(LOGS_FILE);
-    return JSON.parse(data);
-  } catch {
-    return [];
-  }
-}
-
-function saveLogs(logs) {
-  fs.writeFileSync(LOGS_FILE, JSON.stringify(logs, null, 2));
-}
-
-// Check if IP has registered
 function hasRegisteredIP(ip) {
-  const users = loadUsers();
+  const users = loadJSON(USERS_FILE);
   return users.some(u => u.ip === ip);
 }
 
-// Add login log entry
 function addLog(username, ip) {
-  const logs = loadLogs();
+  const logs = loadJSON(LOGS_FILE);
   logs.push({ username, ip, timestamp: new Date().toISOString() });
-  saveLogs(logs);
+  saveJSON(LOGS_FILE, logs);
 }
 
-// Middleware to check logged-in user
+// Authentication middleware
 function authRequired(req, res, next) {
   if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
   next();
@@ -100,7 +84,6 @@ app.post('/register', (req, res) => {
 
   if (!username || !password) return res.status(400).json({ error: 'Missing username or password' });
 
-  // No admin registration allowed here
   if (username === process.env.ADMIN_USERNAME) {
     return res.status(400).json({ error: 'Cannot register as admin' });
   }
@@ -109,13 +92,13 @@ app.post('/register', (req, res) => {
     return res.status(400).json({ error: 'This IP has already registered a user' });
   }
 
-  let users = loadUsers();
+  const users = loadJSON(USERS_FILE);
   if (users.find(u => u.username === username)) {
     return res.status(400).json({ error: 'Username already exists' });
   }
 
   users.push({ username, password, role: 'user', ip });
-  saveUsers(users);
+  saveJSON(USERS_FILE, users);
 
   req.session.user = { username, role: 'user' };
   addLog(username, ip);
@@ -131,7 +114,6 @@ app.post('/login', (req, res) => {
   if (!username || !password) return res.status(400).json({ error: 'Missing username or password' });
 
   if (username === process.env.ADMIN_USERNAME) {
-    // Admin login
     if (password === process.env.ADMIN_PASSWORD) {
       req.session.user = { username, role: 'admin' };
       addLog(username, ip);
@@ -141,8 +123,7 @@ app.post('/login', (req, res) => {
     }
   }
 
-  // User login
-  const users = loadUsers();
+  const users = loadJSON(USERS_FILE);
   const user = users.find(u => u.username === username && u.password === password);
   if (!user) {
     return res.status(401).json({ error: 'Invalid username or password' });
@@ -161,30 +142,32 @@ app.post('/logout', authRequired, (req, res) => {
   });
 });
 
-// Get chat messages (simple in-memory)
-const chatMessages = [];
-
+// Chat endpoints
 app.get('/chat', authRequired, (req, res) => {
-  res.json(chatMessages);
+  const messages = loadJSON(CHAT_FILE);
+  res.json(messages);
 });
 
 app.post('/chat', authRequired, (req, res) => {
   const { message } = req.body;
   if (!message) return res.status(400).json({ error: 'No message' });
-  chatMessages.push({ user: req.session.user.username, message, timestamp: new Date().toISOString() });
+
+  const messages = loadJSON(CHAT_FILE);
+  messages.push({ user: req.session.user.username, message, timestamp: new Date().toISOString() });
+  saveJSON(CHAT_FILE, messages);
+
   res.json({ success: true });
 });
 
-// Upload (dummy)
+// Upload (placeholder)
 app.post('/upload', authRequired, (req, res) => {
-  // For simplicity, no actual file upload implementation here.
-  // You can add multer or other upload handlers later.
   res.json({ success: true, message: 'Upload endpoint placeholder' });
 });
 
 // Admin-only logs view
 app.get('/logs', adminRequired, (req, res) => {
-  res.json(loadLogs());
+  const logs = loadJSON(LOGS_FILE);
+  res.json(logs);
 });
 
 // Serve index.html

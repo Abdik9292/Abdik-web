@@ -102,9 +102,9 @@
   </section>
 
   <section aria-label="Profile icon upload">
-    <h3>Upload Profile Icon (PNG, &lt;10MB)</h3>
-    <input type="file" id="avatar" accept="image/png" aria-describedby="avatar-desc" />
-    <small id="avatar-desc">Only PNG images under 10MB allowed.</small>
+    <h3>Upload Profile Icon (Image &lt;10MB)</h3>
+    <input type="file" id="avatar" accept="image/*" aria-describedby="avatar-desc" />
+    <small id="avatar-desc">All image types under 10MB allowed.</small>
     <button id="upload-btn" onclick="uploadAvatar()" disabled aria-label="Upload profile icon button">Upload</button>
     <img id="avatar-preview" class="hidden" alt="Profile icon preview" />
   </section>
@@ -141,7 +141,6 @@ function showUserPanel(role) {
   if (role !== 'user') loadLogs();
 }
 
-// Login
 async function login() {
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value.trim();
@@ -165,7 +164,6 @@ async function login() {
   }
 }
 
-// Register
 async function register() {
   const username = document.getElementById('reg-username').value.trim();
   const password = document.getElementById('reg-password').value.trim();
@@ -191,13 +189,11 @@ async function register() {
   }
 }
 
-// Logout
 async function logout() {
   await fetch(`${API}/logout`, { method: 'POST', credentials: 'include' });
   location.reload();
 }
 
-// Load chat messages, scroll to bottom
 async function loadChat() {
   try {
     const res = await fetch(`${API}/chat`, { credentials: 'include' });
@@ -215,7 +211,6 @@ async function loadChat() {
   } catch {}
 }
 
-// Send chat message
 async function sendMessage() {
   const input = document.getElementById('chat-input');
   const message = input.value.trim();
@@ -229,7 +224,7 @@ async function sendMessage() {
     });
     if (res.ok) {
       input.value = '';
-      await loadChat();  // **await here fixes chat update bug**
+      await loadChat();
     } else {
       alert('Failed to send message.');
     }
@@ -238,7 +233,6 @@ async function sendMessage() {
   }
 }
 
-// Load logs (for admins and superadmins)
 async function loadLogs() {
   try {
     const res = await fetch(`${API}/logs`, { credentials: 'include' });
@@ -248,13 +242,13 @@ async function loadLogs() {
   } catch {}
 }
 
-// Upload avatar image (PNG < 10MB)
 async function uploadAvatar() {
   const input = document.getElementById('avatar');
-  if (!input.files.length) return alert('Choose a PNG file.');
+  if (!input.files.length) return alert('Choose an image file.');
   const file = input.files[0];
-  if (file.type !== 'image/png') return alert('Only PNG files are allowed.');
-  if (file.size > 10 * 1024 * 1024) return alert('File must be less than 10MB.');
+  if (!file.type.startsWith('image/')) return alert('Only image files are allowed.');
+  if (file.size > 10 * 1024 * 1024) return alert('Image must be less than 10MB.');
+  
   const form = new FormData();
   form.append('image', file);
   try {
@@ -277,12 +271,10 @@ async function uploadAvatar() {
   }
 }
 
-// Enable upload button only when a file is selected
 document.getElementById('avatar').addEventListener('change', function() {
   document.getElementById('upload-btn').disabled = !this.files.length;
 });
 
-// Simple HTML escaping helper
 function escapeHtml(text) {
   return text
     .replace(/&/g, "&amp;")

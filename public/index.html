@@ -76,7 +76,7 @@
   <label for="login-password">Password</label>
   <input type="password" id="login-password" placeholder="Password" required autocomplete="current-password" />
   
-  <button onclick="login()">Login</button>
+  <button onclick="login()" aria-label="Login button">Login</button>
   <p>Don't have an account? <a href="#" onclick="showRegister(); return false;">Register here</a></p>
 </div>
 
@@ -88,7 +88,7 @@
   <label for="reg-password">Password (min 8 chars)</label>
   <input type="password" id="reg-password" placeholder="Password" required minlength="8" autocomplete="new-password" />
   
-  <button onclick="register()">Register</button>
+  <button onclick="register()" aria-label="Register button">Register</button>
   <p>Already have an account? <a href="#" onclick="showLogin(); return false;">Back to login</a></p>
 </div>
 
@@ -98,14 +98,14 @@
     <h3>Chat</h3>
     <div class="chat-box" id="chat-box" aria-live="polite" aria-atomic="false"></div>
     <textarea id="chat-input" rows="3" placeholder="Write a message..." aria-label="Chat message input"></textarea>
-    <button onclick="sendMessage()">Send</button>
+    <button onclick="sendMessage()" aria-label="Send chat message button">Send</button>
   </section>
 
   <section aria-label="Profile icon upload">
-    <h3>Upload Profile Icon (PNG, &lt;100KB)</h3>
+    <h3>Upload Profile Icon (PNG, &lt;10MB)</h3>
     <input type="file" id="avatar" accept="image/png" aria-describedby="avatar-desc" />
-    <small id="avatar-desc">Only PNG images under 100KB allowed.</small>
-    <button id="upload-btn" onclick="uploadAvatar()" disabled>Upload</button>
+    <small id="avatar-desc">Only PNG images under 10MB allowed.</small>
+    <button id="upload-btn" onclick="uploadAvatar()" disabled aria-label="Upload profile icon button">Upload</button>
     <img id="avatar-preview" class="hidden" alt="Profile icon preview" />
   </section>
 
@@ -114,7 +114,7 @@
     <pre id="log-output" tabindex="0"></pre>
   </section>
 
-  <button onclick="logout()">Logout</button>
+  <button onclick="logout()" aria-label="Logout button">Logout</button>
 </div>
 
 <script>
@@ -123,11 +123,13 @@ const API = 'https://abdik-web-production.up.railway.app';
 function showLogin() {
   document.getElementById('login-panel').classList.remove('hidden');
   document.getElementById('register-panel').classList.add('hidden');
+  document.getElementById('user-panel').classList.add('hidden');
 }
 
 function showRegister() {
   document.getElementById('login-panel').classList.add('hidden');
   document.getElementById('register-panel').classList.remove('hidden');
+  document.getElementById('user-panel').classList.add('hidden');
 }
 
 function showUserPanel(role) {
@@ -227,7 +229,7 @@ async function sendMessage() {
     });
     if (res.ok) {
       input.value = '';
-      loadChat();
+      await loadChat();  // **await here fixes chat update bug**
     } else {
       alert('Failed to send message.');
     }
@@ -246,13 +248,13 @@ async function loadLogs() {
   } catch {}
 }
 
-// Upload avatar image (PNG <100KB)
+// Upload avatar image (PNG < 10MB)
 async function uploadAvatar() {
   const input = document.getElementById('avatar');
   if (!input.files.length) return alert('Choose a PNG file.');
   const file = input.files[0];
   if (file.type !== 'image/png') return alert('Only PNG files are allowed.');
-  if (file.size > 100 * 1024) return alert('File must be less than 100KB.');
+  if (file.size > 10 * 1024 * 1024) return alert('File must be less than 10MB.');
   const form = new FormData();
   form.append('image', file);
   try {

@@ -1,438 +1,196 @@
-import static spark.Spark.*;
-import spark.Session;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Abdik-web Panel</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 600px; margin: 20px auto; }
+  #loginForm, #panel { border: 1px solid #ccc; padding: 15px; border-radius: 5px; }
+  #chat { height: 200px; overflow-y: auto; border: 1px solid #ccc; margin-bottom: 10px; padding: 5px; background: #f9f9f9; }
+  #chat div { margin-bottom: 5px; }
+  #uploadForm { margin-top: 15px; }
+  button { cursor: pointer; }
+</style>
+</head>
+<body>
 
-import com.google.gson.Gson;
+<div id="loginForm">
+  <h2>Login</h2>
+  <form id="formLogin">
+    <label>Username:<br /><input type="text" id="username" required /></label><br /><br />
+    <label>Password:<br /><input type="password" id="password" required /></label><br /><br />
+    <button type="submit">Login</button>
+  </form>
+  <div id="loginError" style="color:red; margin-top:10px;"></div>
+</div>
 
-import javax.servlet.MultipartConfigElement;
-import javax.servlet.http.Part;
-import java.io.*;
-import java.nio.file.Paths;
-import java.util.*;
-import java.util.concurrent.*;
+<div id="panel" style="display:none;">
+  <h2 id="panelTitle"></h2>
+  <p>Welcome, <span id="userDisplay"></span> (<span id="roleDisplay"></span>)</p>
+  <button id="btnLogout">Logout</button>
 
-public class Main {
+  <h3>Chat</h3>
+  <div id="chat"></div>
+  <form id="formChat">
+    <input id="chatInput" autocomplete="off" placeholder="Type a message" required />
+    <button type="submit">Send</button>
+  </form>
 
-    private static final int MAX_LOGIN_ATTEMPTS = 5;
-    private static final int LOGIN_COOLDOWN_MINUTES = 5;
-    private static final int AFK_LOGOUT_MINUTES = 30;
-    private static final int MAX_CHAT_MESSAGES = 500;
+  <h3>Upload File</h3>
+  <form id="uploadForm" enctype="multipart/form-data">
+    <input type="file" id="uploadFile" required />
+    <button type="submit">Upload</button>
+  </form>
+  <div id="uploadStatus" style="margin-top:10px;"></div>
+</div>
 
-    private static final String ADMIN_USER = "admin";
-    private static final String ADMIN_PASS = "adminpass";
-    private static final String NORMAL_USER = "user";
-    private static final String USER_PASS = "userpass";
+<script>
+  const API_BASE = "/Abdik-web/api";
 
-    private static final String SESSION_ROLE = "role";
-    private static final String SESSION_USERNAME = "username";
-    private static final String SESSION_LAST_ACTIVITY = "lastActivity";
+  // Check if logged in (session or localStorage)
+  let currentUser = null;
+  let currentRole = null;
 
-    private static final Map<String, LoginAttemptInfo> loginAttempts = new ConcurrentHashMap<>();
-    private static final List<ChatMessage> chatMessages = Collections.synchronizedList(new LinkedList<>());
+  function showLogin(errorMsg) {
+    document.getElementById('loginForm').style.display = 'block';
+    document.getElementById('panel').style.display = 'none';
+    document.getElementById('loginError').textContent = errorMsg || '';
+  }
 
-    private static final Gson gson = new Gson();
+  function showPanel(user, role) {
+    currentUser = user;
+    currentRole = role;
 
-    public static void main(String[] args) {
-        ipAddress("abdik9292.github.io");
-        port(8080);
+    document.getElementById('loginForm').style.display = 'none';
+    document.getElementById('panel').style.display = 'block';
+    document.getElementById('userDisplay').textContent = user;
+    document.getElementById('roleDisplay').textContent = role;
+    document.getElementById('panelTitle').textContent = role === "admin" ? "Admin Panel" : "User Panel";
 
-        enableCORS("*", "GET,POST,OPTIONS", "Content-Type,Authorization");
+    fetchMessages();
+    if (!window.chatInterval) {
+      window.chatInterval = setInterval(fetchMessages, 1000);
+    }
+  }
 
-        before((req, res) -> {
-            Session session = req.session(false);
-            if (session != null && session.attribute(SESSION_ROLE) != null) {
-                session.attribute(SESSION_LAST_ACTIVITY, System.currentTimeMillis());
-            }
-        });
+  async function login(username, password) {
+    const formData = new URLSearchParams();
+    formData.append('username', username);
+    formData.append('password', password);
 
-        // Basic AFK cleaner placeholder
-        ScheduledExecutorService afkCleaner = Executors.newSingleThreadScheduledExecutor();
-        afkCleaner.scheduleAtFixedRate(() -> {
-            // Placeholder for session cleanup
-        }, 1, 1, TimeUnit.MINUTES);
+    const res = await fetch(API_BASE + "/login", {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: formData.toString()
+    });
+    const data = await res.json();
+    return data;
+  }
 
-        get("/Abdik-web/", (req, res) -> {
-            res.redirect("/Abdik-web/login");
-            return null;
-        });
+  async function logout() {
+    await fetch(API_BASE + "/logout", { method: "POST" });
+    currentUser = null;
+    currentRole = null;
+    clearInterval(window.chatInterval);
+    window.chatInterval = null;
+    showLogin();
+  }
 
-        // LOGIN HTML FORM (for browser)
-        get("/Abdik-web/login", (req, res) -> """
-            <h2>Login</h2>
-            <form method='POST'>
-                Username: <input name='username' required><br>
-                Password: <input name='password' type='password' required><br>
-                <button type='submit'>Login</button>
-            </form>
-        """);
+  // Chat
+  async function fetchMessages() {
+    const res = await fetch(API_BASE + "/chat/messages");
+    if (res.status === 403) {
+      await logout();
+      return;
+    }
+    const messages = await res.json();
+    const chatDiv = document.getElementById('chat');
+    chatDiv.innerHTML = messages.map(m => `<div><b>${m.username}:</b> ${escapeHtml(m.message)}</div>`).join('');
+    chatDiv.scrollTop = chatDiv.scrollHeight;
+  }
 
-        // LOGIN API - JSON version for Unity
-        post("/Abdik-web/api/login", (req, res) -> {
-            res.type("application/json");
-            String user = req.queryParams("username");
-            String pass = req.queryParams("password");
-            String ip = req.ip();
+  async function sendMessage(message) {
+    const formData = new URLSearchParams();
+    formData.append('message', message);
 
-            if (user == null || pass == null || user.isEmpty() || pass.isEmpty()) {
-                return gson.toJson(Map.of("success", false, "error", "Missing username or password"));
-            }
+    const res = await fetch(API_BASE + "/chat/send", {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: formData.toString()
+    });
+    const data = await res.json();
+    if (!data.success) {
+      alert("Failed to send message: " + (data.error || "Unknown error"));
+    }
+  }
 
-            LoginAttemptInfo attemptInfo = loginAttempts.getOrDefault(ip, new LoginAttemptInfo());
-            long now = System.currentTimeMillis();
+  // Upload
+  async function uploadFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
 
-            if (attemptInfo.blockUntil > now) {
-                long secondsLeft = (attemptInfo.blockUntil - now) / 1000;
-                return gson.toJson(Map.of("success", false, "error", "Too many failed attempts. Try again in " + secondsLeft + " seconds."));
-            }
+    const res = await fetch('/Abdik-web/upload', {
+      method: 'POST',
+      body: formData
+    });
+    const text = await res.text();
+    document.getElementById('uploadStatus').innerHTML = text;
+  }
 
-            boolean isAdmin = ADMIN_USER.equals(user) && ADMIN_PASS.equals(pass);
-            boolean isUser = NORMAL_USER.equals(user) && USER_PASS.equals(pass);
+  // Utils
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
 
-            if (isAdmin || isUser) {
-                attemptInfo.reset();
-                loginAttempts.put(ip, attemptInfo);
+  // Event listeners
+  document.getElementById('formLogin').addEventListener('submit', async e => {
+    e.preventDefault();
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
 
-                Session session = req.session(true);
-                session.attribute(SESSION_USERNAME, user);
-                session.attribute(SESSION_ROLE, isAdmin ? "admin" : "user");
-                session.attribute(SESSION_LAST_ACTIVITY, now);
-
-                return gson.toJson(Map.of("success", true, "role", isAdmin ? "admin" : "user"));
-            } else {
-                attemptInfo.failedCount++;
-                attemptInfo.lastFailed = now;
-                if (attemptInfo.failedCount >= MAX_LOGIN_ATTEMPTS) {
-                    attemptInfo.blockUntil = now + LOGIN_COOLDOWN_MINUTES * 60_000L;
-                    attemptInfo.failedCount = 0;
-                }
-                loginAttempts.put(ip, attemptInfo);
-
-                return gson.toJson(Map.of("success", false, "error", "Invalid credentials"));
-            }
-        });
-
-        // LOGIN POST FOR BROWSER (keep your original login POST to serve browser)
-        post("/Abdik-web/login", (req, res) -> {
-            String user = req.queryParams("username");
-            String pass = req.queryParams("password");
-            String ip = req.ip();
-
-            if (user == null || pass == null || user.isEmpty() || pass.isEmpty()) {
-                return "<p>Missing username or password.</p><a href='/Abdik-web/login'>Try again</a>";
-            }
-
-            LoginAttemptInfo attemptInfo = loginAttempts.getOrDefault(ip, new LoginAttemptInfo());
-            long now = System.currentTimeMillis();
-
-            if (attemptInfo.blockUntil > now) {
-                long secondsLeft = (attemptInfo.blockUntil - now) / 1000;
-                return "<p>Too many failed attempts. Try again in " + secondsLeft + " seconds.</p><a href='/Abdik-web/login'>Back</a>";
-            }
-
-            boolean isAdmin = ADMIN_USER.equals(user) && ADMIN_PASS.equals(pass);
-            boolean isUser = NORMAL_USER.equals(user) && USER_PASS.equals(pass);
-
-            if (isAdmin || isUser) {
-                attemptInfo.reset();
-                loginAttempts.put(ip, attemptInfo);
-
-                Session session = req.session(true);
-                session.attribute(SESSION_USERNAME, user);
-                session.attribute(SESSION_ROLE, isAdmin ? "admin" : "user");
-                session.attribute(SESSION_LAST_ACTIVITY, now);
-
-                res.redirect(isAdmin ? "/Abdik-web/admin" : "/Abdik-web/user");
-                return null;
-            } else {
-                attemptInfo.failedCount++;
-                attemptInfo.lastFailed = now;
-                if (attemptInfo.failedCount >= MAX_LOGIN_ATTEMPTS) {
-                    attemptInfo.blockUntil = now + LOGIN_COOLDOWN_MINUTES * 60_000L;
-                    attemptInfo.failedCount = 0;
-                }
-                loginAttempts.put(ip, attemptInfo);
-
-                return "<p>Invalid credentials.</p><a href='/Abdik-web/login'>Try again</a>";
-            }
-        });
-
-        // AUTH MIDDLEWARE FOR ADMIN
-        before("/Abdik-web/admin", (req, res) -> {
-            Session session = req.session(false);
-            if (session == null || !"admin".equals(session.attribute(SESSION_ROLE))) {
-                res.redirect("/Abdik-web/login");
-                halt();
-            }
-        });
-
-        // ADMIN PAGE
-        get("/Abdik-web/admin", (req, res) -> {
-            Session session = req.session();
-            return adminPageHtml(session);
-        });
-
-        // AUTH MIDDLEWARE FOR USER & ADMIN
-        before("/Abdik-web/user", (req, res) -> {
-            Session session = req.session(false);
-            if (session == null || (!"user".equals(session.attribute(SESSION_ROLE)) && !"admin".equals(session.attribute(SESSION_ROLE)))) {
-                res.redirect("/Abdik-web/login");
-                halt();
-            }
-        });
-
-        // USER PAGE
-        get("/Abdik-web/user", (req, res) -> {
-            Session session = req.session();
-            return userPageHtml(session);
-        });
-
-        // LOGOUT API for Unity
-        post("/Abdik-web/api/logout", (req, res) -> {
-            Session session = req.session(false);
-            if (session != null) {
-                session.invalidate();
-            }
-            res.type("application/json");
-            return gson.toJson(Map.of("success", true));
-        });
-
-        // LOGOUT BROWSER GET
-        get("/Abdik-web/logout", (req, res) -> {
-            Session session = req.session(false);
-            if (session != null) session.invalidate();
-            res.redirect("/Abdik-web/login");
-            return null;
-        });
-
-        // CHAT SEND - JSON API for Unity and browser form
-        post("/Abdik-web/api/chat/send", (req, res) -> {
-            res.type("application/json");
-            Session session = req.session(false);
-            if (session == null || session.attribute(SESSION_ROLE) == null) {
-                res.status(403);
-                return gson.toJson(Map.of("success", false, "error", "Not logged in"));
-            }
-            String username = session.attribute(SESSION_USERNAME);
-            String role = session.attribute(SESSION_ROLE);
-
-            String message = req.queryParams("message");
-            if (message == null || message.trim().isEmpty()) {
-                return gson.toJson(Map.of("success", false, "error", "Empty message not allowed"));
-            }
-            message = message.trim();
-
-            ChatMessage chatMsg = new ChatMessage(username, role, message, System.currentTimeMillis());
-
-            synchronized (chatMessages) {
-                chatMessages.add(chatMsg);
-                if (chatMessages.size() > MAX_CHAT_MESSAGES) {
-                    chatMessages.remove(0);
-                }
-            }
-
-            return gson.toJson(Map.of("success", true));
-        });
-
-        // CHAT GET MESSAGES
-        get("/Abdik-web/api/chat/messages", (req, res) -> {
-            res.type("application/json");
-            synchronized (chatMessages) {
-                return gson.toJson(chatMessages);
-            }
-        });
-
-        // FILE UPLOAD HTML FORM
-        get("/Abdik-web/upload", (req, res) -> {
-            Session session = req.session(false);
-            if (session == null || session.attribute(SESSION_ROLE) == null) {
-                res.redirect("/Abdik-web/login");
-                return null;
-            }
-            return """
-                <h2>Upload a file</h2>
-                <form method="post" enctype="multipart/form-data">
-                    <input type="file" name="file" required>
-                    <button type="submit">Upload</button>
-                </form>
-                <a href="/Abdik-web/">Home</a>
-            """;
-        });
-
-        // FILE UPLOAD HANDLER
-        post("/Abdik-web/upload", (req, res) -> {
-            Session session = req.session(false);
-            if (session == null || session.attribute(SESSION_ROLE) == null) {
-                res.status(403);
-                return "Not logged in";
-            }
-
-            // Configure multipart config for file upload
-            MultipartConfigElement multipartConfigElement = new MultipartConfigElement("/tmp");
-            req.raw().setAttribute("org.eclipse.jetty.multipartConfig", multipartConfigElement);
-
-            Part filePart = null;
-            try {
-                filePart = req.raw().getPart("file");
-                if (filePart == null) {
-                    return "No file uploaded";
-                }
-
-                String submittedFileName = Paths.get(filePart.getSubmittedFileName()).getFileName().toString();
-                // Save file to disk or memory (example: save to uploads folder)
-                File uploadsDir = new File("uploads");
-                if (!uploadsDir.exists()) {
-                    uploadsDir.mkdirs();
-                }
-                File file = new File(uploadsDir, submittedFileName);
-
-                try (InputStream input = filePart.getInputStream()) {
-                    try (OutputStream output = new FileOutputStream(file)) {
-                        byte[] buffer = new byte[1024];
-                        int read;
-                        while ((read = input.read(buffer)) != -1) {
-                            output.write(buffer, 0, read);
-                        }
-                    }
-                }
-
-                // You can add your code here to send the file to Discord or do other stuff
-
-                return "<p>File uploaded: " + submittedFileName + "</p><a href='/Abdik-web/upload'>Upload another</a>";
-            } finally {
-                if (filePart != null) filePart.delete();
-            }
-        });
-
-        // OPTIONS requests support for CORS preflight
-        options("/*", (request, response) -> {
-            String accessControlRequestHeaders = request.headers("Access-Control-Request-Headers");
-            if (accessControlRequestHeaders != null) {
-                response.header("Access-Control-Allow-Headers", accessControlRequestHeaders);
-            }
-
-            String accessControlRequestMethod = request.headers("Access-Control-Request-Method");
-            if (accessControlRequestMethod != null) {
-                response.header("Access-Control-Allow-Methods", accessControlRequestMethod);
-            }
-            return "OK";
-        });
+    if (!username || !password) {
+      showLogin("Please enter username and password.");
+      return;
     }
 
-    private static String adminPageHtml(Session session) {
-        return """
-            <h2>Admin Panel</h2>
-            <p>Welcome, %s (admin)</p>
-            <a href="/Abdik-web/logout">Logout</a><br>
-            <a href="/Abdik-web/upload">Upload Files</a><br>
-            <h3>Chat Messages</h3>
-            <div id="chat"></div>
-            <form id="chatForm">
-                <input id="msg" autocomplete="off" required><button>Send</button>
-            </form>
-            <script>
-            const chatDiv = document.getElementById('chat');
-            const form = document.getElementById('chatForm');
-            form.addEventListener('submit', async e => {
-                e.preventDefault();
-                const msg = document.getElementById('msg').value;
-                if(!msg) return;
-                const res = await fetch('/Abdik-web/api/chat/send', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                    body: 'message=' + encodeURIComponent(msg)
-                });
-                document.getElementById('msg').value = '';
-            });
-            async function fetchMessages() {
-                const res = await fetch('/Abdik-web/api/chat/messages');
-                const data = await res.json();
-                chatDiv.innerHTML = data.map(m => '<b>' + m.username + ':</b> ' + m.message).join('<br>');
-            }
-            setInterval(fetchMessages, 1000);
-            fetchMessages();
-            </script>
-        """.formatted(session.attribute("username"));
+    const data = await login(username, password);
+    if (data.success) {
+      showPanel(username, data.role);
+    } else {
+      showLogin(data.error || "Login failed.");
     }
+  });
 
-    private static String userPageHtml(Session session) {
-        return """
-            <h2>User Panel</h2>
-            <p>Welcome, %s</p>
-            <a href="/Abdik-web/logout">Logout</a><br>
-            <h3>Chat Messages</h3>
-            <div id="chat"></div>
-            <form id="chatForm">
-                <input id="msg" autocomplete="off" required><button>Send</button>
-            </form>
-            <script>
-            const chatDiv = document.getElementById('chat');
-            const form = document.getElementById('chatForm');
-            form.addEventListener('submit', async e => {
-                e.preventDefault();
-                const msg = document.getElementById('msg').value;
-                if(!msg) return;
-                const res = await fetch('/Abdik-web/api/chat/send', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                    body: 'message=' + encodeURIComponent(msg)
-                });
-                document.getElementById('msg').value = '';
-            });
-            async function fetchMessages() {
-                const res = await fetch('/Abdik-web/api/chat/messages');
-                const data = await res.json();
-                chatDiv.innerHTML = data.map(m => '<b>' + m.username + ':</b> ' + m.message).join('<br>');
-            }
-            setInterval(fetchMessages, 1000);
-            fetchMessages();
-            </script>
-        """.formatted(session.attribute("username"));
+  document.getElementById('btnLogout').addEventListener('click', async () => {
+    await logout();
+  });
+
+  document.getElementById('formChat').addEventListener('submit', async e => {
+    e.preventDefault();
+    const input = document.getElementById('chatInput');
+    const msg = input.value.trim();
+    if (!msg) return;
+    await sendMessage(msg);
+    input.value = '';
+  });
+
+  document.getElementById('uploadForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const fileInput = document.getElementById('uploadFile');
+    if (fileInput.files.length === 0) {
+      alert("Please select a file.");
+      return;
     }
+    await uploadFile(fileInput.files[0]);
+    fileInput.value = '';
+  });
 
-    private static class LoginAttemptInfo {
-        int failedCount = 0;
-        long lastFailed = 0;
-        long blockUntil = 0;
+  // On page load
+  showLogin();
 
-        void reset() {
-            failedCount = 0;
-            lastFailed = 0;
-            blockUntil = 0;
-        }
-    }
-
-    private static class ChatMessage {
-        String username;
-        String role;
-        String message;
-        long timestamp;
-
-        ChatMessage(String username, String role, String message, long timestamp) {
-            this.username = username;
-            this.role = role;
-            this.message = message;
-            this.timestamp = timestamp;
-        }
-    }
-
-    // Enable CORS
-    private static void enableCORS(final String origin, final String methods, final String headers) {
-        options("/*", (request, response) -> {
-            String accessControlRequestHeaders = request.headers("Access-Control-Request-Headers");
-            if (accessControlRequestHeaders != null) {
-                response.header("Access-Control-Allow-Headers", accessControlRequestHeaders);
-            }
-            String accessControlRequestMethod = request.headers("Access-Control-Request-Method");
-            if (accessControlRequestMethod != null) {
-                response.header("Access-Control-Allow-Methods", accessControlRequestMethod);
-            }
-            return "OK";
-        });
-
-        before((request, response) -> {
-            response.header("Access-Control-Allow-Origin", origin);
-            response.header("Access-Control-Request-Method", methods);
-            response.header("Access-Control-Allow-Headers", headers);
-            // Note: this may be set on each response automatically
-        });
-    }
-}
+</script>
+</body>
+</html>

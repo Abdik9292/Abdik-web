@@ -10,16 +10,14 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CORS: allow GitHub frontend
+// CORS
 app.use(cors({
-  origin: 'https://abdik9292.github.io/Abdik-web/',
+  origin: 'https://abdik9292.github.io',
   credentials: true,
 }));
 
-// Public file
-app.use(express.static(path.join(__dirname, 'public')));
-
 // Middleware
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 app.use(fileUpload());
 app.use(session({
@@ -28,23 +26,28 @@ app.use(session({
   saveUninitialized: true,
   cookie: {
     secure: false,
-    sameSite: 'none'
+    sameSite: 'lax',
   }
 }));
 
-// Trust proxy for correct IP logging (Railway support)
 app.set('trust proxy', true);
 
 // File paths
 const CONFIG_DIR = path.join(__dirname, 'config');
 const USERS_FILE = path.join(CONFIG_DIR, 'users.json');
-const LOGS_FILE = path.join(CONFIG_DIR, 'log.json'); // For admin
-const SUPER_LOG_FILE = path.join(CONFIG_DIR, 'superlog.json'); // For superadmin
+const LOGS_FILE = path.join(CONFIG_DIR, 'log.json');
+const SUPER_LOG_FILE = path.join(CONFIG_DIR, 'superlog.json');
 const CHAT_FILE = path.join(CONFIG_DIR, 'chat.json');
 const SUPERADMIN_FILE = path.join(CONFIG_DIR, 'superadmin.json');
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+const PFP_DIR = path.join(UPLOADS_DIR, 'pfp');
+const FILES_DIR = path.join(UPLOADS_DIR, 'files');
 
-// Ensure config dir/files exist
-if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR);
+// Ensure directories and files exist
+[CONFIG_DIR, UPLOADS_DIR, PFP_DIR, FILES_DIR].forEach(dir => {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+});
+
 if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, '{}');
 if (!fs.existsSync(LOGS_FILE)) fs.writeFileSync(LOGS_FILE, '[]');
 if (!fs.existsSync(SUPER_LOG_FILE)) fs.writeFileSync(SUPER_LOG_FILE, '[]');
@@ -76,12 +79,7 @@ function getIP(req) {
 
 function logEvent(user, ip, target, file) {
   const logs = JSON.parse(fs.readFileSync(file));
-  logs.push({
-    user,
-    target,
-    ip,
-    timestamp: new Date().toISOString()
-  });
+  logs.push({ user, target, ip, timestamp: new Date().toISOString() });
   fs.writeFileSync(file, JSON.stringify(logs, null, 2));
 }
 
@@ -96,6 +94,8 @@ function saveChat(messages) {
 }
 
 // Routes
+
+// Registration
 app.post('/register', (req, res) => {
   const { username, password } = req.body;
   if (!username || username.length < 3 || username.length > 16)
@@ -112,29 +112,25 @@ app.post('/register', (req, res) => {
   res.json({ message: 'Registered successfully.', role: 'user' });
 });
 
+// Login
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
-
-  const superadmin = loadSuperadmin();
   const users = loadUsers();
   const ip = getIP(req);
+  const superadmin = loadSuperadmin();
 
-  // Superadmin login
   if (username === superadmin.username && password === superadmin.password) {
     req.session.user = { username, role: 'superadmin' };
     logEvent(username, ip, 'superadmin_login', SUPER_LOG_FILE);
     return res.json({ message: 'Superadmin login successful', role: 'superadmin' });
   }
 
-  // Admins from .env
-  if (process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD &&
-      username === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
+  if (process.env.ADMIN_USERNAME === username && process.env.ADMIN_PASSWORD === password) {
     req.session.user = { username, role: 'admin' };
     logEvent(username, ip, 'admin_login', LOGS_FILE);
     return res.json({ message: 'Admin login successful', role: 'admin' });
   }
 
-  // Regular users
   const user = users[username];
   if (!user || user.password !== password)
     return res.status(401).json({ error: 'Invalid credentials' });
@@ -144,6 +140,7 @@ app.post('/login', (req, res) => {
   res.json({ message: 'Login successful', role: user.role });
 });
 
+// Logout
 app.post('/logout', (req, res) => {
   req.session.destroy(() => res.json({ message: 'Logged out.' }));
 });
@@ -164,85 +161,84 @@ app.get('/logs', (req, res) => {
   res.status(403).json({ error: 'Forbidden' });
 });
 
-// Chat system
+// Get chat messages
 app.get('/chat', (req, res) => {
   if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
   const messages = loadChat();
   res.json(messages.slice(-50));
 });
 
+// Send chat message or file
 app.post('/chat', (req, res) => {
   if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { message } = req.body;
-  if (!message || typeof message !== 'string') {
-    return res.status(400).json({ error: 'Message must be a string.' });
-  }
-
   const messages = loadChat();
-  messages.push({
-    user: req.session.user.username,
-    message,
-    timestamp: new Date().toISOString()
-  });
-  saveChat(messages);
-  res.json({ message: 'Message posted.' });
-});
+  const username = req.session.user.username;
 
-// Upload avatar (PFP)
-app.post('/upload', (req, res) => {
-  if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
-  if (!req.files || !req.files.image) return res.status(400).json({ error: 'No file uploaded.' });
+  if (req.files && req.files.file) {
+    const file = req.files.file;
+    if (file.size > 125 * 1024 * 1024) {
+      return res.status(400).json({ error: 'File too large (max 125MB).' });
+    }
 
-  const file = req.files.image;
-  const allowedFormats = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'image/bmp', 'image/tiff', 'image/heif', 'image/heic'];
-  if (!allowedFormats.includes(file.mimetype)) return res.status(400).json({ error: 'Invalid file format.' });
-  if (file.size > 10 * 1024 * 1024) return res.status(400).json({ error: 'File too large (max 10MB).' });
+    const fileName = `${Date.now()}_${file.name}`;
+    const filePath = path.join(FILES_DIR, fileName);
+    file.mv(filePath, err => {
+      if (err) return res.status(500).json({ error: 'File upload failed.' });
 
-  const uploadPath = path.join(__dirname, 'uploads');
-  if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath);
-
-  const filePath = path.join(uploadPath, `${req.session.user.username}.png`);
-  sharp(file.data)
-    .resize(512, 512)
-    .blur(1)
-    .toFile(filePath, (err, info) => {
-      if (err) return res.status(500).json({ error: 'Upload failed.' });
-      res.json({ message: 'Upload successful.' });
+      messages.push({
+        user: username,
+        file: `/uploads/files/${fileName}`,
+        timestamp: new Date().toISOString()
+      });
+      saveChat(messages);
+      res.json({ message: 'File uploaded to chat.' });
     });
-});
-
-// Upload files to chat
-app.post('/upload-chat', (req, res) => {
-  if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
-  if (!req.files || !req.files.file) return res.status(400).json({ error: 'No file uploaded.' });
-
-  const file = req.files.file;
-  if (file.size > 125 * 1024 * 1024) return res.status(400).json({ error: 'File too large (max 125MB).' });
-
-  const uploadPath = path.join(__dirname, 'uploads');
-  if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath);
-
-  const filePath = path.join(uploadPath, `${Date.now()}-${file.name}`);
-  file.mv(filePath, err => {
-    if (err) return res.status(500).json({ error: 'Upload failed.' });
-    const messages = loadChat();
+  } else if (req.body.message) {
     messages.push({
-      user: req.session.user.username,
-      message: `Uploaded a file: ${file.name}`,
-      timestamp: new Date().toISOString(),
-      file: filePath
+      user: username,
+      message: req.body.message,
+      timestamp: new Date().toISOString()
     });
     saveChat(messages);
-    res.json({ message: 'File uploaded.' });
-  });
+    res.json({ message: 'Message sent.' });
+  } else {
+    res.status(400).json({ error: 'No message or file provided.' });
+  }
 });
 
+// Upload profile picture (resized and blurred)
+app.post('/upload', async (req, res) => {
+  if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
+  if (!req.files || !req.files.image) return res.status(400).json({ error: 'No image uploaded.' });
+
+  const file = req.files.image;
+  if (!file.mimetype.startsWith('image/'))
+    return res.status(400).json({ error: 'Only image files allowed.' });
+
+  if (file.size > 10 * 1024 * 1024)
+    return res.status(400).json({ error: 'Image too large (max 10MB).' });
+
+  const outputPath = path.join(PFP_DIR, `${req.session.user.username}.webp`);
+  try {
+    await sharp(file.data)
+      .resize(128, 128)
+      .blur()
+      .webp({ quality: 80 })
+      .toFile(outputPath);
+
+    res.json({ message: 'Profile picture uploaded.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Image processing failed.' });
+  }
+});
+
+// Fallback route
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Start
+// Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server running on port ${PORT}`);
 });

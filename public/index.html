@@ -26,53 +26,93 @@
       margin: 0.5rem 0;
       border-radius: 4px;
       border: none;
+      font-size: 1rem;
+      box-sizing: border-box;
     }
-    button { background: #4CAF50; color: white; cursor: pointer; }
-    button:hover { background: #45a049; }
-    .chat-box { max-height: 200px; overflow-y: auto; background: #1a1a2b; padding: 1rem; margin-bottom: 1rem; border-radius: 5px; }
+    button { 
+      background: #4CAF50; 
+      color: white; 
+      cursor: pointer; 
+      transition: background 0.3s ease;
+    }
+    button:hover:not(:disabled) { background: #45a049; }
+    button:disabled {
+      background: #777;
+      cursor: not-allowed;
+    }
+    .chat-box { 
+      max-height: 200px; 
+      overflow-y: auto; 
+      background: #1a1a2b; 
+      padding: 1rem; 
+      margin-bottom: 1rem; 
+      border-radius: 5px; 
+      font-size: 0.9rem;
+    }
     .chat-message { margin-bottom: 0.5rem; }
     .chat-message strong { color: #64d8cb; }
-    #avatar-preview { width: 64px; height: 64px; object-fit: cover; margin-top: 1rem; border-radius: 50%; }
+    #avatar-preview { 
+      width: 64px; 
+      height: 64px; 
+      object-fit: cover; 
+      margin-top: 1rem; 
+      border-radius: 50%; 
+      border: 2px solid #4caf50;
+    }
+    label {
+      display: block;
+      margin-top: 1rem;
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
 
-<div class="panel" id="login-panel">
+<div class="panel" id="login-panel" aria-label="Login panel">
   <h2>Login</h2>
-  <input type="text" id="login-username" placeholder="Username" />
-  <input type="password" id="login-password" placeholder="Password" />
+  <label for="login-username">Username</label>
+  <input type="text" id="login-username" placeholder="Username" required autocomplete="username" />
+  
+  <label for="login-password">Password</label>
+  <input type="password" id="login-password" placeholder="Password" required autocomplete="current-password" />
+  
   <button onclick="login()">Login</button>
-  <p>Don't have an account? <a href="#" onclick="showRegister()">Register here</a></p>
+  <p>Don't have an account? <a href="#" onclick="showRegister(); return false;">Register here</a></p>
 </div>
 
-<div class="panel hidden" id="register-panel">
+<div class="panel hidden" id="register-panel" aria-label="Registration panel">
   <h2>Register</h2>
-  <input type="text" id="reg-username" placeholder="Username (3–16 chars)" />
-  <input type="password" id="reg-password" placeholder="Password (min 8 chars)" />
+  <label for="reg-username">Username (3–16 chars)</label>
+  <input type="text" id="reg-username" placeholder="Username" required minlength="3" maxlength="16" autocomplete="username" />
+  
+  <label for="reg-password">Password (min 8 chars)</label>
+  <input type="password" id="reg-password" placeholder="Password" required minlength="8" autocomplete="new-password" />
+  
   <button onclick="register()">Register</button>
-  <p>Already have an account? <a href="#" onclick="showLogin()">Back to login</a></p>
+  <p>Already have an account? <a href="#" onclick="showLogin(); return false;">Back to login</a></p>
 </div>
 
-<div class="panel hidden" id="user-panel">
+<div class="panel hidden" id="user-panel" aria-label="User panel">
   <h2 id="welcome"></h2>
-  <div id="chat-section">
+  <section id="chat-section" aria-label="Chat section">
     <h3>Chat</h3>
-    <div class="chat-box" id="chat-box"></div>
-    <textarea id="chat-input" placeholder="Write a message..."></textarea>
+    <div class="chat-box" id="chat-box" aria-live="polite" aria-atomic="false"></div>
+    <textarea id="chat-input" rows="3" placeholder="Write a message..." aria-label="Chat message input"></textarea>
     <button onclick="sendMessage()">Send</button>
-  </div>
+  </section>
 
-  <div>
+  <section aria-label="Profile icon upload">
     <h3>Upload Profile Icon (PNG, &lt;100KB)</h3>
-    <input type="file" id="avatar" accept="image/png" />
-    <button onclick="uploadAvatar()">Upload</button>
-    <img id="avatar-preview" class="hidden" />
-  </div>
+    <input type="file" id="avatar" accept="image/png" aria-describedby="avatar-desc" />
+    <small id="avatar-desc">Only PNG images under 100KB allowed.</small>
+    <button id="upload-btn" onclick="uploadAvatar()" disabled>Upload</button>
+    <img id="avatar-preview" class="hidden" alt="Profile icon preview" />
+  </section>
 
-  <div id="logs-section" class="hidden">
+  <section id="logs-section" class="hidden" aria-label="Login logs">
     <h3>Login Logs</h3>
-    <pre id="log-output"></pre>
-  </div>
+    <pre id="log-output" tabindex="0"></pre>
+  </section>
 
   <button onclick="logout()">Logout</button>
 </div>
@@ -99,106 +139,155 @@ function showUserPanel(role) {
   if (role !== 'user') loadLogs();
 }
 
+// Login
 async function login() {
-  const username = document.getElementById('login-username').value;
-  const password = document.getElementById('login-password').value;
-  const res = await fetch(`${API}/login`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password })
-  });
-
-  const data = await res.json();
-  if (res.ok) {
-    document.getElementById('welcome').textContent = `Welcome, ${username} (${data.role})`;
-    showUserPanel(data.role);
-  } else {
-    alert(data.error || 'Login failed.');
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value.trim();
+  if (!username || !password) return alert('Please fill in both fields.');
+  try {
+    const res = await fetch(`${API}/login`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      document.getElementById('welcome').textContent = `Welcome, ${username} (${data.role})`;
+      showUserPanel(data.role);
+    } else {
+      alert(data.error || 'Login failed.');
+    }
+  } catch {
+    alert('Network error during login.');
   }
 }
 
+// Register
 async function register() {
-  const username = document.getElementById('reg-username').value;
-  const password = document.getElementById('reg-password').value;
-  const res = await fetch(`${API}/register`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password })
-  });
-
-  const data = await res.json();
-  if (res.ok) {
-    alert('Registered successfully. You are now logged in.');
-    document.getElementById('welcome').textContent = `Welcome, ${username} (user)`;
-    showUserPanel('user');
-  } else {
-    alert(data.error || 'Registration failed.');
+  const username = document.getElementById('reg-username').value.trim();
+  const password = document.getElementById('reg-password').value.trim();
+  if (username.length < 3 || username.length > 16) return alert('Username must be 3 to 16 characters.');
+  if (password.length < 8) return alert('Password must be at least 8 characters.');
+  try {
+    const res = await fetch(`${API}/register`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alert('Registered successfully. You are now logged in.');
+      document.getElementById('welcome').textContent = `Welcome, ${username} (user)`;
+      showUserPanel('user');
+    } else {
+      alert(data.error || 'Registration failed.');
+    }
+  } catch {
+    alert('Network error during registration.');
   }
 }
 
+// Logout
 async function logout() {
   await fetch(`${API}/logout`, { method: 'POST', credentials: 'include' });
   location.reload();
 }
 
+// Load chat messages, scroll to bottom
 async function loadChat() {
-  const res = await fetch(`${API}/chat`, { credentials: 'include' });
-  if (!res.ok) return;
-  const chat = await res.json();
-  const box = document.getElementById('chat-box');
-  box.innerHTML = '';
-  chat.forEach(msg => {
-    const div = document.createElement('div');
-    div.className = 'chat-message';
-    div.innerHTML = `<strong>${msg.user}</strong>: ${msg.message}`;
-    box.appendChild(div);
-  });
+  try {
+    const res = await fetch(`${API}/chat`, { credentials: 'include' });
+    if (!res.ok) return;
+    const chat = await res.json();
+    const box = document.getElementById('chat-box');
+    box.innerHTML = '';
+    chat.forEach(msg => {
+      const div = document.createElement('div');
+      div.className = 'chat-message';
+      div.innerHTML = `<strong>${escapeHtml(msg.user)}</strong>: ${escapeHtml(msg.message)}`;
+      box.appendChild(div);
+    });
+    box.scrollTop = box.scrollHeight;
+  } catch {}
 }
 
+// Send chat message
 async function sendMessage() {
-  const message = document.getElementById('chat-input').value.trim();
+  const input = document.getElementById('chat-input');
+  const message = input.value.trim();
   if (!message) return;
-  await fetch(`${API}/chat`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message })
-  });
-  document.getElementById('chat-input').value = '';
-  loadChat();
+  try {
+    const res = await fetch(`${API}/chat`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message })
+    });
+    if (res.ok) {
+      input.value = '';
+      loadChat();
+    } else {
+      alert('Failed to send message.');
+    }
+  } catch {
+    alert('Network error sending message.');
+  }
 }
 
+// Load logs (for admins and superadmins)
 async function loadLogs() {
-  const res = await fetch(`${API}/logs`, { credentials: 'include' });
-  if (!res.ok) return;
-  const logs = await res.json();
-  document.getElementById('log-output').textContent = JSON.stringify(logs, null, 2);
+  try {
+    const res = await fetch(`${API}/logs`, { credentials: 'include' });
+    if (!res.ok) return;
+    const logs = await res.json();
+    document.getElementById('log-output').textContent = JSON.stringify(logs, null, 2);
+  } catch {}
 }
 
+// Upload avatar image (PNG <100KB)
 async function uploadAvatar() {
   const input = document.getElementById('avatar');
   if (!input.files.length) return alert('Choose a PNG file.');
   const file = input.files[0];
+  if (file.type !== 'image/png') return alert('Only PNG files are allowed.');
+  if (file.size > 100 * 1024) return alert('File must be less than 100KB.');
   const form = new FormData();
   form.append('image', file);
-
-  const res = await fetch(`${API}/upload`, {
-    method: 'POST',
-    credentials: 'include',
-    body: form
-  });
-
-  const data = await res.json();
-  if (res.ok) {
-    const preview = document.getElementById('avatar-preview');
-    preview.src = URL.createObjectURL(file);
-    preview.classList.remove('hidden');
-    alert('Uploaded!');
-  } else {
-    alert(data.error || 'Upload failed.');
+  try {
+    const res = await fetch(`${API}/upload`, {
+      method: 'POST',
+      credentials: 'include',
+      body: form
+    });
+    const data = await res.json();
+    if (res.ok) {
+      const preview = document.getElementById('avatar-preview');
+      preview.src = URL.createObjectURL(file);
+      preview.classList.remove('hidden');
+      alert('Uploaded!');
+    } else {
+      alert(data.error || 'Upload failed.');
+    }
+  } catch {
+    alert('Network error uploading avatar.');
   }
+}
+
+// Enable upload button only when a file is selected
+document.getElementById('avatar').addEventListener('change', function() {
+  document.getElementById('upload-btn').disabled = !this.files.length;
+});
+
+// Simple HTML escaping helper
+function escapeHtml(text) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 </script>
 </body>

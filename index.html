@@ -1,59 +1,454 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>WebSocket Chat</title>
-  <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
-    #messages { border: 1px solid #ccc; height: 300px; overflow-y: scroll; padding: 10px; margin-bottom: 10px; }
-    #input { width: 80%; }
-    #sendBtn { width: 18%; }
-  </style>
-</head>
-<body>
-  <h2>WebSocket Chat</h2>
-  <div id="messages"></div>
-  <input id="input" type="text" placeholder="Type your message..." />
-  <button id="sendBtn">Send</button>
+import static spark.Spark.*;
+import spark.Session;
 
-  <script>
-    const WS_URL = 'wss://abdik-webpage-production.up.railway.app';
+import com.google.gson.Gson;
 
-    const ws = new WebSocket(WS_URL);
-    const messages = document.getElementById('messages');
-    const input = document.getElementById('input');
-    const sendBtn = document.getElementById('sendBtn');
+import javax.servlet.MultipartConfigElement;
+import javax.servlet.http.Part;
+import java.io.*;
+import java.nio.file.Paths;
+import java.util.*;
+import java.util.concurrent.*;
 
-    ws.onopen = () => {
-      addMessage('Connected to server');
-    };
+public class Main {
 
-    ws.onmessage = (event) => {
-      addMessage('Received: ' + event.data);
-    };
+    private static final int MAX_LOGIN_ATTEMPTS = 5;
+    private static final int LOGIN_COOLDOWN_MINUTES = 5;
+    private static final int AFK_LOGOUT_MINUTES = 30;
+    private static final int MAX_CHAT_MESSAGES = 500;
 
-    ws.onclose = () => {
-      addMessage('Disconnected from server');
-    };
+    private static final String ADMIN_USER = "admin";
+    private static final String ADMIN_PASS = "adminpass";
+    private static final String NORMAL_USER = "user";
+    private static final String USER_PASS = "userpass";
 
-    ws.onerror = (err) => {
-      addMessage('Error: ' + err.message);
-    };
+    private static final String SESSION_ROLE = "role";
+    private static final String SESSION_USERNAME = "username";
+    private static final String SESSION_LAST_ACTIVITY = "lastActivity";
 
-    sendBtn.onclick = () => {
-      if (input.value) {
-        ws.send(input.value);
-        addMessage('Sent: ' + input.value);
-        input.value = '';
-      }
-    };
+    private static final Map<String, LoginAttemptInfo> loginAttempts = new ConcurrentHashMap<>();
+    private static final List<ChatMessage> chatMessages = Collections.synchronizedList(new LinkedList<>());
 
-    function addMessage(msg) {
-      const p = document.createElement('p');
-      p.textContent = msg;
-      messages.appendChild(p);
-      messages.scrollTop = messages.scrollHeight;
+    private static final Gson gson = new Gson();
+
+    public static void main(String[] args) {
+        ipAddress("0.0.0.0");
+        port(8080);
+
+        enableCORS("*", "GET,POST,OPTIONS", "Content-Type,Authorization");
+
+        before((req, res) -> {
+            Session session = req.session(false);
+            if (session != null && session.attribute(SESSION_ROLE) != null) {
+                session.attribute(SESSION_LAST_ACTIVITY, System.currentTimeMillis());
+            }
+        });
+
+        // Basic AFK cleaner placeholder
+        ScheduledExecutorService afkCleaner = Executors.newSingleThreadScheduledExecutor();
+        afkCleaner.scheduleAtFixedRate(() -> {
+            // Placeholder for session cleanup
+        }, 1, 1, TimeUnit.MINUTES);
+
+        get("/", (req, res) -> {
+            res.redirect("/login");
+            return null;
+        });
+
+        // LOGIN HTML FORM (for browser)
+        get("/login", (req, res) -> """
+            <h2>Login</h2>
+            <form method='POST'>
+                Username: <input name='username' required><br>
+                Password: <input name='password' type='password' required><br>
+                <button type='submit'>Login</button>
+            </form>
+        """);
+
+        // LOGIN API - JSON version for Unity
+        post("/api/login", (req, res) -> {
+            res.type("application/json");
+            String user = req.queryParams("username");
+            String pass = req.queryParams("password");
+            String ip = req.ip();
+
+            if (user == null || pass == null || user.isEmpty() || pass.isEmpty()) {
+                return gson.toJson(Map.of("success", false, "error", "Missing username or password"));
+            }
+
+            LoginAttemptInfo attemptInfo = loginAttempts.getOrDefault(ip, new LoginAttemptInfo());
+            long now = System.currentTimeMillis();
+
+            if (attemptInfo.blockUntil > now) {
+                long secondsLeft = (attemptInfo.blockUntil - now) / 1000;
+                return gson.toJson(Map.of("success", false, "error", "Too many failed attempts. Try again in " + secondsLeft + " seconds."));
+            }
+
+            boolean isAdmin = ADMIN_USER.equals(user) && ADMIN_PASS.equals(pass);
+            boolean isUser = NORMAL_USER.equals(user) && USER_PASS.equals(pass);
+
+            if (isAdmin || isUser) {
+                attemptInfo.reset();
+                loginAttempts.put(ip, attemptInfo);
+
+                Session session = req.session(true);
+                session.attribute(SESSION_USERNAME, user);
+                session.attribute(SESSION_ROLE, isAdmin ? "admin" : "user");
+                session.attribute(SESSION_LAST_ACTIVITY, now);
+
+                return gson.toJson(Map.of("success", true, "role", isAdmin ? "admin" : "user"));
+            } else {
+                attemptInfo.failedCount++;
+                attemptInfo.lastFailed = now;
+                if (attemptInfo.failedCount >= MAX_LOGIN_ATTEMPTS) {
+                    attemptInfo.blockUntil = now + LOGIN_COOLDOWN_MINUTES * 60_000L;
+                    attemptInfo.failedCount = 0;
+                }
+                loginAttempts.put(ip, attemptInfo);
+
+                return gson.toJson(Map.of("success", false, "error", "Invalid credentials"));
+            }
+        });
+
+        // LOGIN POST FOR BROWSER (keep your original login POST to serve browser)
+        post("/login", (req, res) -> {
+            String user = req.queryParams("username");
+            String pass = req.queryParams("password");
+            String ip = req.ip();
+
+            if (user == null || pass == null || user.isEmpty() || pass.isEmpty()) {
+                return "<p>Missing username or password.</p><a href='/login'>Try again</a>";
+            }
+
+            LoginAttemptInfo attemptInfo = loginAttempts.getOrDefault(ip, new LoginAttemptInfo());
+            long now = System.currentTimeMillis();
+
+            if (attemptInfo.blockUntil > now) {
+                long secondsLeft = (attemptInfo.blockUntil - now) / 1000;
+                return "<p>Too many failed attempts. Try again in " + secondsLeft + " seconds.</p><a href='/login'>Back</a>";
+            }
+
+            boolean isAdmin = ADMIN_USER.equals(user) && ADMIN_PASS.equals(pass);
+            boolean isUser = NORMAL_USER.equals(user) && USER_PASS.equals(pass);
+
+            if (isAdmin || isUser) {
+                attemptInfo.reset();
+                loginAttempts.put(ip, attemptInfo);
+
+                Session session = req.session(true);
+                session.attribute(SESSION_USERNAME, user);
+                session.attribute(SESSION_ROLE, isAdmin ? "admin" : "user");
+                session.attribute(SESSION_LAST_ACTIVITY, now);
+
+                res.redirect(isAdmin ? "/admin" : "/user");
+                return null;
+            } else {
+                attemptInfo.failedCount++;
+                attemptInfo.lastFailed = now;
+                if (attemptInfo.failedCount >= MAX_LOGIN_ATTEMPTS) {
+                    attemptInfo.blockUntil = now + LOGIN_COOLDOWN_MINUTES * 60_000L;
+                    attemptInfo.failedCount = 0;
+                }
+                loginAttempts.put(ip, attemptInfo);
+
+                return "<p>Invalid credentials.</p><a href='/login'>Try again</a>";
+            }
+        });
+
+        // AUTH MIDDLEWARE FOR ADMIN
+        before("/admin", (req, res) -> {
+            Session session = req.session(false);
+            if (session == null || !"admin".equals(session.attribute(SESSION_ROLE))) {
+                res.redirect("/login");
+                halt();
+            }
+        });
+
+        // ADMIN PAGE
+        get("/admin", (req, res) -> {
+            Session session = req.session();
+            return adminPageHtml(session);
+        });
+
+        // AUTH MIDDLEWARE FOR USER & ADMIN
+        before("/user", (req, res) -> {
+            Session session = req.session(false);
+            if (session == null || (!"user".equals(session.attribute(SESSION_ROLE)) && !"admin".equals(session.attribute(SESSION_ROLE)))) {
+                res.redirect("/login");
+                halt();
+            }
+        });
+
+        // USER PAGE
+        get("/user", (req, res) -> {
+            Session session = req.session();
+            return userPageHtml(session);
+        });
+
+        // LOGOUT API for Unity
+        post("/api/logout", (req, res) -> {
+            Session session = req.session(false);
+            if (session != null) {
+                session.invalidate();
+            }
+            res.type("application/json");
+            return gson.toJson(Map.of("success", true));
+        });
+
+        // LOGOUT BROWSER GET
+        get("/logout", (req, res) -> {
+            Session session = req.session(false);
+            if (session != null) session.invalidate();
+            res.redirect("/login");
+            return null;
+        });
+
+        // CHAT SEND - JSON API for Unity and browser form
+        post("/api/chat/send", (req, res) -> {
+            res.type("application/json");
+            Session session = req.session(false);
+            if (session == null || session.attribute(SESSION_ROLE) == null) {
+                res.status(403);
+                return gson.toJson(Map.of("success", false, "error", "Not logged in"));
+            }
+            String username = session.attribute(SESSION_USERNAME);
+            String role = session.attribute(SESSION_ROLE);
+
+            String message = req.queryParams("message");
+            if (message == null || message.trim().isEmpty()) {
+                return gson.toJson(Map.of("success", false, "error", "Empty message not allowed"));
+            }
+            message = message.trim();
+
+            ChatMessage chatMsg = new ChatMessage(username, role, message, System.currentTimeMillis());
+
+            synchronized (chatMessages) {
+                chatMessages.add(chatMsg);
+                if (chatMessages.size() > MAX_CHAT_MESSAGES) {
+                    chatMessages.remove(0);
+                }
+            }
+
+            return gson.toJson(Map.of("success", true));
+        });
+
+        // CHAT SEND FORM FOR BROWSER (existing)
+        post("/chat/send", (req, res) -> {
+            Session session = req.session(false);
+            if (session == null || session.attribute(SESSION_ROLE) == null) {
+                res.status(403);
+                return "Not logged in";
+            }
+            String username = session.attribute(SESSION_USERNAME);
+            String role = session.attribute(SESSION_ROLE);
+
+            String message = req.queryParams("message");
+            if (message == null || message.trim().isEmpty()) {
+                return "Empty message not allowed";
+            }
+            message = message.trim();
+
+            ChatMessage chatMsg = new ChatMessage(username, role, message, System.currentTimeMillis());
+
+            synchronized (chatMessages) {
+                chatMessages.add(chatMsg);
+                if (chatMessages.size() > MAX_CHAT_MESSAGES) {
+                    chatMessages.remove(0);
+                }
+            }
+
+            res.redirect(role.equals("admin") ? "/admin" : "/user");
+            return null;
+        });
+
+        // CHAT MESSAGES JSON (for Unity and browser)
+        get("/chat/messages", (req, res) -> {
+            res.type("application/json");
+            synchronized (chatMessages) {
+                return gson.toJson(chatMessages);
+            }
+        });
+
+        // FILE UPLOAD HTML FORM
+        get("/upload", (req, res) -> """
+            <h2>Upload a file</h2>
+            <form method='POST' enctype='multipart/form-data'>
+                <input type='file' name='file' required><br>
+                <button type='submit'>Upload</button>
+            </form>
+            <p><a href='/admin'>Back</a></p>
+        """);
+
+        // FILE UPLOAD API FOR UNITY AND BROWSER
+        post("/upload", (req, res) -> {
+            Session session = req.session(false);
+            if (session == null || session.attribute(SESSION_ROLE) == null) {
+                res.status(403);
+                return "Not logged in";
+            }
+
+            // Required for multipart form data
+            MultipartConfigElement multipartConfigElement = new MultipartConfigElement("/tmp");
+            req.raw().setAttribute("org.eclipse.jetty.multipartConfig", multipartConfigElement);
+
+            Part filePart = null;
+            try {
+                filePart = req.raw().getPart("file");
+            } catch (Exception e) {
+                e.printStackTrace();
+                res.status(400);
+                return "File upload error";
+            }
+
+            if (filePart == null || filePart.getSize() == 0) {
+                return "No file uploaded";
+            }
+
+            String fileName = Paths.get(filePart.getSubmittedFileName()).getFileName().toString();
+
+            // Save to server
+            File uploadDir = new File("uploads");
+            if (!uploadDir.exists()) uploadDir.mkdirs();
+
+            File file = new File(uploadDir, fileName);
+            try (InputStream input = filePart.getInputStream();
+                 OutputStream output = new FileOutputStream(file)) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = input.read(buffer)) != -1) {
+                    output.write(buffer, 0, read);
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+                res.status(500);
+                return "Failed to save file";
+            } finally {
+                filePart.delete();
+            }
+
+            // TODO: Add Discord webhook file upload here if you want
+
+            return "File uploaded successfully: " + fileName;
+        });
+
+        // OPTIONS for CORS preflight
+        options("/*", (req, res) -> {
+            String accessControlRequestHeaders = req.headers("Access-Control-Request-Headers");
+            if (accessControlRequestHeaders != null) {
+                res.header("Access-Control-Allow-Headers", accessControlRequestHeaders);
+            }
+
+            String accessControlRequestMethod = req.headers("Access-Control-Request-Method");
+            if (accessControlRequestMethod != null) {
+                res.header("Access-Control-Allow-Methods", accessControlRequestMethod);
+            }
+            return "OK";
+        });
     }
-  </script>
-</body>
-</html>
+
+    // Enable CORS headers for all requests
+    private static void enableCORS(final String origin, final String methods, final String headers) {
+        before((request, response) -> {
+            response.header("Access-Control-Allow-Origin", origin);
+            response.header("Access-Control-Allow-Methods", methods);
+            response.header("Access-Control-Allow-Headers", headers);
+            // Some browsers send preflight OPTIONS request without cookies
+            // so we do not reject on missing cookies in OPTIONS
+        });
+    }
+
+    // Admin page HTML with chat and upload links
+    private static String adminPageHtml(Session session) {
+        String username = session.attribute(SESSION_USERNAME);
+        String role = session.attribute(SESSION_ROLE);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("<h1>Admin Panel</h1>");
+        sb.append("<p>Logged in as: ").append(username).append(" (").append(role).append(")</p>");
+        sb.append("<form action='/chat/send' method='post'>");
+        sb.append("<input name='message' placeholder='Type a message...' required>");
+        sb.append("<button type='submit'>Send</button>");
+        sb.append("</form>");
+        sb.append("<h2>Chat messages</h2>");
+        sb.append("<div id='chat'></div>");
+        sb.append("<p><a href='/upload'>Upload file</a> | <a href='/logout'>Logout</a></p>");
+
+        sb.append("<script>\n" +
+                "async function loadChat() {\n" +
+                "  const res = await fetch('/chat/messages');\n" +
+                "  const messages = await res.json();\n" +
+                "  const chatDiv = document.getElementById('chat');\n" +
+                "  chatDiv.innerHTML = '';\n" +
+                "  messages.forEach(msg => {\n" +
+                "    const p = document.createElement('p');\n" +
+                "    p.textContent = `[${new Date(msg.timestamp).toLocaleTimeString()}] ${msg.role} ${msg.username}: ${msg.message}`;\n" +
+                "    chatDiv.appendChild(p);\n" +
+                "  });\n" +
+                "}\n" +
+                "setInterval(loadChat, 2000);\n" +
+                "loadChat();\n" +
+                "</script>");
+
+        return sb.toString();
+    }
+
+    private static String userPageHtml(Session session) {
+        String username = session.attribute(SESSION_USERNAME);
+        String role = session.attribute(SESSION_ROLE);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("<h1>User Panel</h1>");
+        sb.append("<p>Logged in as: ").append(username).append(" (").append(role).append(")</p>");
+        sb.append("<form action='/chat/send' method='post'>");
+        sb.append("<input name='message' placeholder='Type a message...' required>");
+        sb.append("<button type='submit'>Send</button>");
+        sb.append("</form>");
+        sb.append("<h2>Chat messages</h2>");
+        sb.append("<div id='chat'></div>");
+        sb.append("<p><a href='/logout'>Logout</a></p>");
+
+        sb.append("<script>\n" +
+                "async function loadChat() {\n" +
+                "  const res = await fetch('/chat/messages');\n" +
+                "  const messages = await res.json();\n" +
+                "  const chatDiv = document.getElementById('chat');\n" +
+                "  chatDiv.innerHTML = '';\n" +
+                "  messages.forEach(msg => {\n" +
+                "    const p = document.createElement('p');\n" +
+                "    p.textContent = `[${new Date(msg.timestamp).toLocaleTimeString()}] ${msg.role} ${msg.username}: ${msg.message}`;\n" +
+                "    chatDiv.appendChild(p);\n" +
+                "  });\n" +
+                "}\n" +
+                "setInterval(loadChat, 2000);\n" +
+                "loadChat();\n" +
+                "</script>");
+
+        return sb.toString();
+    }
+
+    private static class LoginAttemptInfo {
+        int failedCount = 0;
+        long lastFailed = 0;
+        long blockUntil = 0;
+
+        void reset() {
+            failedCount = 0;
+            lastFailed = 0;
+            blockUntil = 0;
+        }
+    }
+
+    private static class ChatMessage {
+        String username;
+        String role;
+        String message;
+        long timestamp;
+
+        ChatMessage(String username, String role, String message, long timestamp) {
+            this.username = username;
+            this.role = role;
+            this.message = message;
+            this.timestamp = timestamp;
+        }
+    }
+}

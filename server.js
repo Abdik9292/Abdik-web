@@ -8,19 +8,34 @@ const path = require('path');
 const app = express();
 const PORT = 3000;
 
+// Ensure config directory exists
+const configDir = path.join(__dirname, 'config');
+if (!fs.existsSync(configDir)) {
+  fs.mkdirSync(configDir);
+}
+
 app.use(express.static('.'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Session config
+// Session config with secret from .env
 app.use(session({
-  secret: 'your-secret-session-key',
+  secret: process.env.SESSION_SECRET || 'fallback-secret',
   resave: false,
   saveUninitialized: false,
 }));
 
-const USERS_FILE = path.join(__dirname, 'config', 'users.json');
-const LOGS_FILE = path.join(__dirname, 'config', 'logs.json');
+const USERS_FILE = path.join(configDir, 'users.json');
+const LOGS_FILE = path.join(configDir, 'logs.json');
+
+// Helper to normalize IP (strip ::ffff: prefix if present)
+function getClientIP(req) {
+  let ip = req.ip || '';
+  if (ip.startsWith('::ffff:')) {
+    ip = ip.substring(7);
+  }
+  return ip;
+}
 
 // Load or initialize users file
 function loadUsers() {
@@ -81,7 +96,7 @@ function adminRequired(req, res, next) {
 // Register (users only, one per IP)
 app.post('/register', (req, res) => {
   const { username, password } = req.body;
-  const ip = req.ip;
+  const ip = getClientIP(req);
 
   if (!username || !password) return res.status(400).json({ error: 'Missing username or password' });
 
@@ -111,7 +126,7 @@ app.post('/register', (req, res) => {
 // Login (users and admin)
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
-  const ip = req.ip;
+  const ip = getClientIP(req);
 
   if (!username || !password) return res.status(400).json({ error: 'Missing username or password' });
 

@@ -15,6 +15,9 @@ app.use(cors({
   credentials: true,
 }));
 
+//Public file
+app.use(express.static(path.join(__dirname, 'public')));
+
 // Middleware
 app.use(express.json());
 app.use(fileUpload());

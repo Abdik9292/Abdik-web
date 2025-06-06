@@ -18,7 +18,7 @@ app.use(session({
   secret: 'secret-key',
   resave: false,
   saveUninitialized: true,
-  cookie: { secure: true } // set true only if using HTTPS
+  cookie: { secure: false } // set true only if using HTTPS
 }));
 
 const USERS_FILE = path.join(__dirname, 'config/users.json');

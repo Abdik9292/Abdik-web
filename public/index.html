@@ -1,230 +1,176 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Chat & Upload with Admin</title>
-<style>
-  body { font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; }
-  #chat-box { border: 1px solid #ccc; height: 200px; overflow-y: scroll; padding: 5px; margin-bottom: 10px; }
-  #logs-box { border: 1px solid #f00; height: 150px; overflow-y: scroll; padding: 5px; margin-top: 10px; background: #ffe6e6; }
-  .hidden { display: none; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>User Panel</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; }
+    #chat-box, #logs-box {
+      border: 1px solid #ccc;
+      height: 200px;
+      overflow-y: scroll;
+      padding: 5px;
+      margin-bottom: 10px;
+      white-space: pre-wrap;
+      background: #f9f9f9;
+    }
+    .hidden { display: none; }
+    .error { color: red; }
+    .success { color: green; }
+  </style>
 </head>
 <body>
 
 <h1>Welcome</h1>
 
 <div id="auth-section">
-  <h2>Register (Users Only)</h2>
-  <form id="register-form">
-    <input type="text" id="reg-username" placeholder="Username" required /><br />
-    <input type="password" id="reg-password" placeholder="Password" required /><br />
-    <button type="submit">Register</button>
-  </form>
-
   <h2>Login</h2>
   <form id="login-form">
     <input type="text" id="login-username" placeholder="Username" required /><br />
     <input type="password" id="login-password" placeholder="Password" required /><br />
     <button type="submit">Login</button>
   </form>
-  <div id="auth-msg" style="color:red;"></div>
+  <p><a href="#" id="show-register">Register</a></p>
+
+  <div id="register-section" class="hidden">
+    <h2>Register</h2>
+    <form id="register-form">
+      <input type="text" id="reg-username" placeholder="Username" required /><br />
+      <input type="password" id="reg-password" placeholder="Password" required /><br />
+      <button type="submit">Register</button>
+    </form>
+  </div>
+
+  <div id="auth-msg" class="error"></div>
 </div>
 
 <div id="main-section" class="hidden">
   <button id="logout-btn">Logout</button>
 
-  <h2>Chat</h2>
-  <div id="chat-box"></div>
-  <form id="chat-form">
-    <input type="text" id="chat-input" placeholder="Type message..." required />
-    <button type="submit">Send</button>
-  </form>
-
-  <h2>Upload</h2>
+  <h2>Upload Profile PNG</h2>
   <form id="upload-form" enctype="multipart/form-data">
-    <input type="file" id="upload-file" name="file" /><br />
+    <input type="file" name="file" accept="image/png" required />
     <button type="submit">Upload</button>
   </form>
 
-  <div id="admin-section" class="hidden">
-    <h2>Login Logs (Admin Only)</h2>
+  <h2>Chat</h2>
+  <div id="chat-box"></div>
+  <form id="chat-form">
+    <input type="text" id="chat-input" placeholder="Type a message" required />
+    <button type="submit">Send</button>
+  </form>
+
+  <div id="logs-section" class="hidden">
+    <h2>Login Logs</h2>
     <div id="logs-box"></div>
   </div>
 </div>
 
 <script>
-  const API_BASE = 'https://abdik-web-production.up.railway.app';
+let currentRole = null;
 
-  const authSection = document.getElementById('auth-section');
-  const mainSection = document.getElementById('main-section');
-  const adminSection = document.getElementById('admin-section');
-  const authMsg = document.getElementById('auth-msg');
+document.getElementById('show-register').onclick = () => {
+  document.getElementById('register-section').classList.toggle('hidden');
+};
+
+document.getElementById('register-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('reg-username').value;
+  const password = document.getElementById('reg-password').value;
+  const res = await fetch('/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+  const data = await res.json();
+  if (res.ok) {
+    showMain(data.role);
+  } else {
+    document.getElementById('auth-msg').textContent = data.error;
+  }
+};
+
+document.getElementById('login-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('login-username').value;
+  const password = document.getElementById('login-password').value;
+  const res = await fetch('/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+  const data = await res.json();
+  if (res.ok) {
+    showMain(data.role);
+  } else {
+    document.getElementById('auth-msg').textContent = data.error;
+  }
+};
+
+document.getElementById('logout-btn').onclick = async () => {
+  await fetch('/logout', { method: 'POST' });
+  location.reload();
+};
+
+function showMain(role) {
+  currentRole = role;
+  document.getElementById('auth-section').classList.add('hidden');
+  document.getElementById('main-section').classList.remove('hidden');
+  if (role === 'admin' || role === 'superadmin') {
+    document.getElementById('logs-section').classList.remove('hidden');
+    loadLogs();
+  }
+  loadChat();
+  setInterval(loadChat, 5000);
+}
+
+document.getElementById('chat-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const message = document.getElementById('chat-input').value;
+  await fetch('/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message })
+  });
+  document.getElementById('chat-input').value = '';
+  loadChat();
+};
+
+async function loadChat() {
+  const res = await fetch('/chat');
+  if (!res.ok) return;
+  const chat = await res.json();
   const chatBox = document.getElementById('chat-box');
-  const logsBox = document.getElementById('logs-box');
-
-  let currentRole = null;
-
-  // Register handler
-  document.getElementById('register-form').addEventListener('submit', async e => {
-    e.preventDefault();
-    authMsg.textContent = '';
-    const username = document.getElementById('reg-username').value.trim();
-    const password = document.getElementById('reg-password').value.trim();
-
-    try {
-      const res = await fetch(`${API_BASE}/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ username, password }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        currentRole = 'user';
-        showMainUI();
-      } else {
-        authMsg.textContent = data.error || 'Registration failed';
-      }
-    } catch (err) {
-      authMsg.textContent = 'Error connecting to server.';
-    }
+  chatBox.innerHTML = '';
+  chat.forEach(entry => {
+    const date = new Date(entry.timestamp);
+    chatBox.innerHTML += `[${date.toLocaleTimeString()}] ${entry.user}: ${entry.message}\n`;
   });
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
 
-  // Login handler
-  document.getElementById('login-form').addEventListener('submit', async e => {
-    e.preventDefault();
-    authMsg.textContent = '';
-    const username = document.getElementById('login-username').value.trim();
-    const password = document.getElementById('login-password').value.trim();
-
-    try {
-      const res = await fetch(`${API_BASE}/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ username, password }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        currentRole = data.role;
-        showMainUI();
-      } else {
-        authMsg.textContent = data.error || 'Login failed';
-      }
-    } catch {
-      authMsg.textContent = 'Error connecting to server.';
-    }
+async function loadLogs() {
+  const res = await fetch('/logs');
+  if (!res.ok) return;
+  const logs = await res.json();
+  const logBox = document.getElementById('logs-box');
+  logBox.innerHTML = '';
+  logs.forEach(entry => {
+    logBox.innerHTML += `${entry.timestamp} - ${entry.username} (${entry.role}) from IP: ${entry.ip}\n`;
   });
+}
 
-  // Logout handler
-  document.getElementById('logout-btn').addEventListener('click', async () => {
-    await fetch(`${API_BASE}/logout`, { method: 'POST', credentials: 'include' });
-    currentRole = null;
-    mainSection.classList.add('hidden');
-    adminSection.classList.add('hidden');
-    authSection.classList.remove('hidden');
-    chatBox.innerHTML = '';
-    logsBox.innerHTML = '';
+document.getElementById('upload-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const formData = new FormData(document.getElementById('upload-form'));
+  const res = await fetch('/upload', {
+    method: 'POST',
+    body: formData
   });
-
-  // Show main UI depending on role
-  function showMainUI() {
-    authSection.classList.add('hidden');
-    mainSection.classList.remove('hidden');
-    if (currentRole === 'admin') {
-      adminSection.classList.remove('hidden');
-      loadLogs();
-    } else {
-      adminSection.classList.add('hidden');
-    }
-    loadChat();
-  }
-
-  // Load chat messages
-  async function loadChat() {
-    try {
-      const res = await fetch(`${API_BASE}/chat`, { credentials: 'include' });
-      if (!res.ok) return;
-      const messages = await res.json();
-      chatBox.innerHTML = '';
-      messages.forEach(m => {
-        const div = document.createElement('div');
-        div.textContent = `[${new Date(m.timestamp).toLocaleTimeString()}] ${m.user}: ${m.message}`;
-        chatBox.appendChild(div);
-      });
-      chatBox.scrollTop = chatBox.scrollHeight;
-    } catch {
-      // fail silently
-    }
-  }
-
-  // Send chat message
-  document.getElementById('chat-form').addEventListener('submit', async e => {
-    e.preventDefault();
-    const msgInput = document.getElementById('chat-input');
-    if (!msgInput.value.trim()) return;
-    try {
-      const res = await fetch(`${API_BASE}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ message: msgInput.value.trim() }),
-      });
-      if (res.ok) {
-        msgInput.value = '';
-        loadChat();
-      }
-    } catch {
-      // fail silently
-    }
-  });
-
-  // Upload file handler
-  document.getElementById('upload-form').addEventListener('submit', async e => {
-    e.preventDefault();
-    const fileInput = document.getElementById('upload-file');
-    if (fileInput.files.length === 0) {
-      alert('Please select a file to upload.');
-      return;
-    }
-    const formData = new FormData();
-    formData.append('file', fileInput.files[0]);
-
-    try {
-      const res = await fetch(`${API_BASE}/upload`, {
-        method: 'POST',
-        credentials: 'include',
-        body: formData,
-      });
-      if (res.ok) {
-        alert('File uploaded successfully.');
-        fileInput.value = '';
-      } else {
-        alert('File upload failed.');
-      }
-    } catch {
-      alert('Error uploading file.');
-    }
-  });
-
-  // Load admin logs
-  async function loadLogs() {
-    try {
-      const res = await fetch(`${API_BASE}/logs`, { credentials: 'include' });
-      if (!res.ok) return;
-      const logs = await res.json();
-      logsBox.innerHTML = '';
-      logs.forEach(l => {
-        const div = document.createElement('div');
-        div.textContent = `${new Date(l.timestamp).toLocaleString()} - ${l.username} - IP: ${l.ip}`;
-        logsBox.appendChild(div);
-      });
-    } catch {
-      // fail silently
-    }
-  }
+  const data = await res.json();
+  alert(data.message || data.error);
+};
 </script>
 
 </body>

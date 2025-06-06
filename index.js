@@ -8,28 +8,37 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// CORS for GitHub Pages
 app.use(cors({
   origin: 'https://abdik9292.github.io',
   credentials: true,
 }));
+
+// Middleware
 app.use(express.json());
 app.use(fileUpload());
 app.use(session({
   secret: 'secret-key',
   resave: false,
   saveUninitialized: true,
-  cookie: { secure: false } // set true only if using HTTPS
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'none'
+  }
 }));
 
+// Config paths
 const USERS_FILE = path.join(__dirname, 'config/users.json');
 const LOGS_FILE = path.join(__dirname, 'config/logs.json');
 const CHAT_FILE = path.join(__dirname, 'config/chat.json');
 
+// Ensure config folder and files exist
 if (!fs.existsSync('config')) fs.mkdirSync('config');
 if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, '{}');
 if (!fs.existsSync(LOGS_FILE)) fs.writeFileSync(LOGS_FILE, '[]');
 if (!fs.existsSync(CHAT_FILE)) fs.writeFileSync(CHAT_FILE, '[]');
 
+// Helper functions
 function loadUsers() {
   return JSON.parse(fs.readFileSync(USERS_FILE));
 }
@@ -51,6 +60,8 @@ function loadChat() {
 function saveChat(messages) {
   fs.writeFileSync(CHAT_FILE, JSON.stringify(messages, null, 2));
 }
+
+// Routes
 
 // Register
 app.post('/register', (req, res) => {
@@ -83,13 +94,13 @@ app.post('/logout', (req, res) => {
   req.session.destroy(() => res.json({ message: 'Logged out.' }));
 });
 
-// Chat get
+// Get chat messages
 app.get('/chat', (req, res) => {
   if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
   res.json(loadChat());
 });
 
-// Chat post
+// Send chat message
 app.post('/chat', (req, res) => {
   if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
   const { message } = req.body;
@@ -99,7 +110,7 @@ app.post('/chat', (req, res) => {
   res.json({ message: 'Message sent.' });
 });
 
-// Logs (admin only)
+// Get login logs (admin only)
 app.get('/logs', (req, res) => {
   if (!req.session.user || req.session.user.role !== 'admin') {
     return res.status(403).json({ error: 'Forbidden' });
@@ -128,5 +139,5 @@ app.post('/upload', (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
 });

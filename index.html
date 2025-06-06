@@ -32,7 +32,7 @@ public class Main {
     private static final Gson gson = new Gson();
 
     public static void main(String[] args) {
-        ipAddress("0.0.0.0");
+        ipAddress("abdik9292.github.io");
         port(8080);
 
         enableCORS("*", "GET,POST,OPTIONS", "Content-Type,Authorization");
@@ -50,13 +50,13 @@ public class Main {
             // Placeholder for session cleanup
         }, 1, 1, TimeUnit.MINUTES);
 
-        get("/", (req, res) -> {
-            res.redirect("/login");
+        get("/Abdik-web/", (req, res) -> {
+            res.redirect("/Abdik-web/login");
             return null;
         });
 
         // LOGIN HTML FORM (for browser)
-        get("/login", (req, res) -> """
+        get("/Abdik-web/login", (req, res) -> """
             <h2>Login</h2>
             <form method='POST'>
                 Username: <input name='username' required><br>
@@ -66,7 +66,7 @@ public class Main {
         """);
 
         // LOGIN API - JSON version for Unity
-        post("/api/login", (req, res) -> {
+        post("/Abdik-web/api/login", (req, res) -> {
             res.type("application/json");
             String user = req.queryParams("username");
             String pass = req.queryParams("password");
@@ -111,13 +111,13 @@ public class Main {
         });
 
         // LOGIN POST FOR BROWSER (keep your original login POST to serve browser)
-        post("/login", (req, res) -> {
+        post("/Abdik-web/login", (req, res) -> {
             String user = req.queryParams("username");
             String pass = req.queryParams("password");
             String ip = req.ip();
 
             if (user == null || pass == null || user.isEmpty() || pass.isEmpty()) {
-                return "<p>Missing username or password.</p><a href='/login'>Try again</a>";
+                return "<p>Missing username or password.</p><a href='/Abdik-web/login'>Try again</a>";
             }
 
             LoginAttemptInfo attemptInfo = loginAttempts.getOrDefault(ip, new LoginAttemptInfo());
@@ -125,7 +125,7 @@ public class Main {
 
             if (attemptInfo.blockUntil > now) {
                 long secondsLeft = (attemptInfo.blockUntil - now) / 1000;
-                return "<p>Too many failed attempts. Try again in " + secondsLeft + " seconds.</p><a href='/login'>Back</a>";
+                return "<p>Too many failed attempts. Try again in " + secondsLeft + " seconds.</p><a href='/Abdik-web/login'>Back</a>";
             }
 
             boolean isAdmin = ADMIN_USER.equals(user) && ADMIN_PASS.equals(pass);
@@ -140,7 +140,7 @@ public class Main {
                 session.attribute(SESSION_ROLE, isAdmin ? "admin" : "user");
                 session.attribute(SESSION_LAST_ACTIVITY, now);
 
-                res.redirect(isAdmin ? "/admin" : "/user");
+                res.redirect(isAdmin ? "/Abdik-web/admin" : "/Abdik-web/user");
                 return null;
             } else {
                 attemptInfo.failedCount++;
@@ -151,42 +151,42 @@ public class Main {
                 }
                 loginAttempts.put(ip, attemptInfo);
 
-                return "<p>Invalid credentials.</p><a href='/login'>Try again</a>";
+                return "<p>Invalid credentials.</p><a href='/Abdik-web/login'>Try again</a>";
             }
         });
 
         // AUTH MIDDLEWARE FOR ADMIN
-        before("/admin", (req, res) -> {
+        before("/Abdik-web/admin", (req, res) -> {
             Session session = req.session(false);
             if (session == null || !"admin".equals(session.attribute(SESSION_ROLE))) {
-                res.redirect("/login");
+                res.redirect("/Abdik-web/login");
                 halt();
             }
         });
 
         // ADMIN PAGE
-        get("/admin", (req, res) -> {
+        get("/Abdik-web/admin", (req, res) -> {
             Session session = req.session();
             return adminPageHtml(session);
         });
 
         // AUTH MIDDLEWARE FOR USER & ADMIN
-        before("/user", (req, res) -> {
+        before("/Abdik-web/user", (req, res) -> {
             Session session = req.session(false);
             if (session == null || (!"user".equals(session.attribute(SESSION_ROLE)) && !"admin".equals(session.attribute(SESSION_ROLE)))) {
-                res.redirect("/login");
+                res.redirect("/Abdik-web/login");
                 halt();
             }
         });
 
         // USER PAGE
-        get("/user", (req, res) -> {
+        get("/Abdik-web/user", (req, res) -> {
             Session session = req.session();
             return userPageHtml(session);
         });
 
         // LOGOUT API for Unity
-        post("/api/logout", (req, res) -> {
+        post("/Abdik-web/api/logout", (req, res) -> {
             Session session = req.session(false);
             if (session != null) {
                 session.invalidate();
@@ -196,15 +196,15 @@ public class Main {
         });
 
         // LOGOUT BROWSER GET
-        get("/logout", (req, res) -> {
+        get("/Abdik-web/logout", (req, res) -> {
             Session session = req.session(false);
             if (session != null) session.invalidate();
-            res.redirect("/login");
+            res.redirect("/Abdik-web/login");
             return null;
         });
 
         // CHAT SEND - JSON API for Unity and browser form
-        post("/api/chat/send", (req, res) -> {
+        post("/Abdik-web/api/chat/send", (req, res) -> {
             res.type("application/json");
             Session session = req.session(false);
             if (session == null || session.attribute(SESSION_ROLE) == null) {
@@ -232,37 +232,8 @@ public class Main {
             return gson.toJson(Map.of("success", true));
         });
 
-        // CHAT SEND FORM FOR BROWSER (existing)
-        post("/chat/send", (req, res) -> {
-            Session session = req.session(false);
-            if (session == null || session.attribute(SESSION_ROLE) == null) {
-                res.status(403);
-                return "Not logged in";
-            }
-            String username = session.attribute(SESSION_USERNAME);
-            String role = session.attribute(SESSION_ROLE);
-
-            String message = req.queryParams("message");
-            if (message == null || message.trim().isEmpty()) {
-                return "Empty message not allowed";
-            }
-            message = message.trim();
-
-            ChatMessage chatMsg = new ChatMessage(username, role, message, System.currentTimeMillis());
-
-            synchronized (chatMessages) {
-                chatMessages.add(chatMsg);
-                if (chatMessages.size() > MAX_CHAT_MESSAGES) {
-                    chatMessages.remove(0);
-                }
-            }
-
-            res.redirect(role.equals("admin") ? "/admin" : "/user");
-            return null;
-        });
-
-        // CHAT MESSAGES JSON (for Unity and browser)
-        get("/chat/messages", (req, res) -> {
+        // CHAT GET MESSAGES
+        get("/Abdik-web/api/chat/messages", (req, res) -> {
             res.type("application/json");
             synchronized (chatMessages) {
                 return gson.toJson(chatMessages);
@@ -270,160 +241,151 @@ public class Main {
         });
 
         // FILE UPLOAD HTML FORM
-        get("/upload", (req, res) -> """
-            <h2>Upload a file</h2>
-            <form method='POST' enctype='multipart/form-data'>
-                <input type='file' name='file' required><br>
-                <button type='submit'>Upload</button>
-            </form>
-            <p><a href='/admin'>Back</a></p>
-        """);
+        get("/Abdik-web/upload", (req, res) -> {
+            Session session = req.session(false);
+            if (session == null || session.attribute(SESSION_ROLE) == null) {
+                res.redirect("/Abdik-web/login");
+                return null;
+            }
+            return """
+                <h2>Upload a file</h2>
+                <form method="post" enctype="multipart/form-data">
+                    <input type="file" name="file" required>
+                    <button type="submit">Upload</button>
+                </form>
+                <a href="/Abdik-web/">Home</a>
+            """;
+        });
 
-        // FILE UPLOAD API FOR UNITY AND BROWSER
-        post("/upload", (req, res) -> {
+        // FILE UPLOAD HANDLER
+        post("/Abdik-web/upload", (req, res) -> {
             Session session = req.session(false);
             if (session == null || session.attribute(SESSION_ROLE) == null) {
                 res.status(403);
                 return "Not logged in";
             }
 
-            // Required for multipart form data
+            // Configure multipart config for file upload
             MultipartConfigElement multipartConfigElement = new MultipartConfigElement("/tmp");
             req.raw().setAttribute("org.eclipse.jetty.multipartConfig", multipartConfigElement);
 
             Part filePart = null;
             try {
                 filePart = req.raw().getPart("file");
-            } catch (Exception e) {
-                e.printStackTrace();
-                res.status(400);
-                return "File upload error";
-            }
-
-            if (filePart == null || filePart.getSize() == 0) {
-                return "No file uploaded";
-            }
-
-            String fileName = Paths.get(filePart.getSubmittedFileName()).getFileName().toString();
-
-            // Save to server
-            File uploadDir = new File("uploads");
-            if (!uploadDir.exists()) uploadDir.mkdirs();
-
-            File file = new File(uploadDir, fileName);
-            try (InputStream input = filePart.getInputStream();
-                 OutputStream output = new FileOutputStream(file)) {
-                byte[] buffer = new byte[8192];
-                int read;
-                while ((read = input.read(buffer)) != -1) {
-                    output.write(buffer, 0, read);
+                if (filePart == null) {
+                    return "No file uploaded";
                 }
-            } catch (IOException e) {
-                e.printStackTrace();
-                res.status(500);
-                return "Failed to save file";
+
+                String submittedFileName = Paths.get(filePart.getSubmittedFileName()).getFileName().toString();
+                // Save file to disk or memory (example: save to uploads folder)
+                File uploadsDir = new File("uploads");
+                if (!uploadsDir.exists()) {
+                    uploadsDir.mkdirs();
+                }
+                File file = new File(uploadsDir, submittedFileName);
+
+                try (InputStream input = filePart.getInputStream()) {
+                    try (OutputStream output = new FileOutputStream(file)) {
+                        byte[] buffer = new byte[1024];
+                        int read;
+                        while ((read = input.read(buffer)) != -1) {
+                            output.write(buffer, 0, read);
+                        }
+                    }
+                }
+
+                // You can add your code here to send the file to Discord or do other stuff
+
+                return "<p>File uploaded: " + submittedFileName + "</p><a href='/Abdik-web/upload'>Upload another</a>";
             } finally {
-                filePart.delete();
+                if (filePart != null) filePart.delete();
             }
-
-            // TODO: Add Discord webhook file upload here if you want
-
-            return "File uploaded successfully: " + fileName;
         });
 
-        // OPTIONS for CORS preflight
-        options("/*", (req, res) -> {
-            String accessControlRequestHeaders = req.headers("Access-Control-Request-Headers");
+        // OPTIONS requests support for CORS preflight
+        options("/*", (request, response) -> {
+            String accessControlRequestHeaders = request.headers("Access-Control-Request-Headers");
             if (accessControlRequestHeaders != null) {
-                res.header("Access-Control-Allow-Headers", accessControlRequestHeaders);
+                response.header("Access-Control-Allow-Headers", accessControlRequestHeaders);
             }
 
-            String accessControlRequestMethod = req.headers("Access-Control-Request-Method");
+            String accessControlRequestMethod = request.headers("Access-Control-Request-Method");
             if (accessControlRequestMethod != null) {
-                res.header("Access-Control-Allow-Methods", accessControlRequestMethod);
+                response.header("Access-Control-Allow-Methods", accessControlRequestMethod);
             }
             return "OK";
         });
     }
 
-    // Enable CORS headers for all requests
-    private static void enableCORS(final String origin, final String methods, final String headers) {
-        before((request, response) -> {
-            response.header("Access-Control-Allow-Origin", origin);
-            response.header("Access-Control-Allow-Methods", methods);
-            response.header("Access-Control-Allow-Headers", headers);
-            // Some browsers send preflight OPTIONS request without cookies
-            // so we do not reject on missing cookies in OPTIONS
-        });
-    }
-
-    // Admin page HTML with chat and upload links
     private static String adminPageHtml(Session session) {
-        String username = session.attribute(SESSION_USERNAME);
-        String role = session.attribute(SESSION_ROLE);
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("<h1>Admin Panel</h1>");
-        sb.append("<p>Logged in as: ").append(username).append(" (").append(role).append(")</p>");
-        sb.append("<form action='/chat/send' method='post'>");
-        sb.append("<input name='message' placeholder='Type a message...' required>");
-        sb.append("<button type='submit'>Send</button>");
-        sb.append("</form>");
-        sb.append("<h2>Chat messages</h2>");
-        sb.append("<div id='chat'></div>");
-        sb.append("<p><a href='/upload'>Upload file</a> | <a href='/logout'>Logout</a></p>");
-
-        sb.append("<script>\n" +
-                "async function loadChat() {\n" +
-                "  const res = await fetch('/chat/messages');\n" +
-                "  const messages = await res.json();\n" +
-                "  const chatDiv = document.getElementById('chat');\n" +
-                "  chatDiv.innerHTML = '';\n" +
-                "  messages.forEach(msg => {\n" +
-                "    const p = document.createElement('p');\n" +
-                "    p.textContent = `[${new Date(msg.timestamp).toLocaleTimeString()}] ${msg.role} ${msg.username}: ${msg.message}`;\n" +
-                "    chatDiv.appendChild(p);\n" +
-                "  });\n" +
-                "}\n" +
-                "setInterval(loadChat, 2000);\n" +
-                "loadChat();\n" +
-                "</script>");
-
-        return sb.toString();
+        return """
+            <h2>Admin Panel</h2>
+            <p>Welcome, %s (admin)</p>
+            <a href="/Abdik-web/logout">Logout</a><br>
+            <a href="/Abdik-web/upload">Upload Files</a><br>
+            <h3>Chat Messages</h3>
+            <div id="chat"></div>
+            <form id="chatForm">
+                <input id="msg" autocomplete="off" required><button>Send</button>
+            </form>
+            <script>
+            const chatDiv = document.getElementById('chat');
+            const form = document.getElementById('chatForm');
+            form.addEventListener('submit', async e => {
+                e.preventDefault();
+                const msg = document.getElementById('msg').value;
+                if(!msg) return;
+                const res = await fetch('/Abdik-web/api/chat/send', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: 'message=' + encodeURIComponent(msg)
+                });
+                document.getElementById('msg').value = '';
+            });
+            async function fetchMessages() {
+                const res = await fetch('/Abdik-web/api/chat/messages');
+                const data = await res.json();
+                chatDiv.innerHTML = data.map(m => '<b>' + m.username + ':</b> ' + m.message).join('<br>');
+            }
+            setInterval(fetchMessages, 1000);
+            fetchMessages();
+            </script>
+        """.formatted(session.attribute("username"));
     }
 
     private static String userPageHtml(Session session) {
-        String username = session.attribute(SESSION_USERNAME);
-        String role = session.attribute(SESSION_ROLE);
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("<h1>User Panel</h1>");
-        sb.append("<p>Logged in as: ").append(username).append(" (").append(role).append(")</p>");
-        sb.append("<form action='/chat/send' method='post'>");
-        sb.append("<input name='message' placeholder='Type a message...' required>");
-        sb.append("<button type='submit'>Send</button>");
-        sb.append("</form>");
-        sb.append("<h2>Chat messages</h2>");
-        sb.append("<div id='chat'></div>");
-        sb.append("<p><a href='/logout'>Logout</a></p>");
-
-        sb.append("<script>\n" +
-                "async function loadChat() {\n" +
-                "  const res = await fetch('/chat/messages');\n" +
-                "  const messages = await res.json();\n" +
-                "  const chatDiv = document.getElementById('chat');\n" +
-                "  chatDiv.innerHTML = '';\n" +
-                "  messages.forEach(msg => {\n" +
-                "    const p = document.createElement('p');\n" +
-                "    p.textContent = `[${new Date(msg.timestamp).toLocaleTimeString()}] ${msg.role} ${msg.username}: ${msg.message}`;\n" +
-                "    chatDiv.appendChild(p);\n" +
-                "  });\n" +
-                "}\n" +
-                "setInterval(loadChat, 2000);\n" +
-                "loadChat();\n" +
-                "</script>");
-
-        return sb.toString();
+        return """
+            <h2>User Panel</h2>
+            <p>Welcome, %s</p>
+            <a href="/Abdik-web/logout">Logout</a><br>
+            <h3>Chat Messages</h3>
+            <div id="chat"></div>
+            <form id="chatForm">
+                <input id="msg" autocomplete="off" required><button>Send</button>
+            </form>
+            <script>
+            const chatDiv = document.getElementById('chat');
+            const form = document.getElementById('chatForm');
+            form.addEventListener('submit', async e => {
+                e.preventDefault();
+                const msg = document.getElementById('msg').value;
+                if(!msg) return;
+                const res = await fetch('/Abdik-web/api/chat/send', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: 'message=' + encodeURIComponent(msg)
+                });
+                document.getElementById('msg').value = '';
+            });
+            async function fetchMessages() {
+                const res = await fetch('/Abdik-web/api/chat/messages');
+                const data = await res.json();
+                chatDiv.innerHTML = data.map(m => '<b>' + m.username + ':</b> ' + m.message).join('<br>');
+            }
+            setInterval(fetchMessages, 1000);
+            fetchMessages();
+            </script>
+        """.formatted(session.attribute("username"));
     }
 
     private static class LoginAttemptInfo {
@@ -450,5 +412,27 @@ public class Main {
             this.message = message;
             this.timestamp = timestamp;
         }
+    }
+
+    // Enable CORS
+    private static void enableCORS(final String origin, final String methods, final String headers) {
+        options("/*", (request, response) -> {
+            String accessControlRequestHeaders = request.headers("Access-Control-Request-Headers");
+            if (accessControlRequestHeaders != null) {
+                response.header("Access-Control-Allow-Headers", accessControlRequestHeaders);
+            }
+            String accessControlRequestMethod = request.headers("Access-Control-Request-Method");
+            if (accessControlRequestMethod != null) {
+                response.header("Access-Control-Allow-Methods", accessControlRequestMethod);
+            }
+            return "OK";
+        });
+
+        before((request, response) -> {
+            response.header("Access-Control-Allow-Origin", origin);
+            response.header("Access-Control-Request-Method", methods);
+            response.header("Access-Control-Allow-Headers", headers);
+            // Note: this may be set on each response automatically
+        });
     }
 }

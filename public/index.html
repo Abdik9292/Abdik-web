@@ -3,422 +3,287 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>User Panel</title>
+<title>User Panel System</title>
 <style>
-  /* Basic Reset and Fonts */
-  body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #2c3e50, #4ca1af);
-    color: #eee;
-    margin: 0;
-    padding: 0;
-  }
-  .container {
-    max-width: 900px;
-    margin: 2rem auto;
-    background: rgba(20, 20, 20, 0.9);
-    border-radius: 10px;
-    padding: 1.5rem 2rem;
-    box-shadow: 0 0 15px #0ef;
-  }
-  h1 {
-    text-align: center;
-    margin-bottom: 1.5rem;
-    color: #0ef;
-  }
-
-  form {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  label {
-    font-weight: 600;
-  }
-
-  input[type="text"],
-  input[type="password"],
-  input[type="file"] {
-    padding: 0.6rem;
-    border-radius: 6px;
-    border: none;
-    font-size: 1rem;
-  }
-
-  input[type="submit"], button {
-    background-color: #0ef;
-    border: none;
-    padding: 0.8rem;
-    font-weight: 700;
-    font-size: 1rem;
-    border-radius: 8px;
-    color: #111;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-  }
-  input[type="submit"]:hover,
-  button:hover {
-    background-color: #08a;
-    color: #ddd;
-  }
-
-  .error {
-    background-color: #ff4c4c;
-    color: #fff;
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    font-weight: 600;
-  }
-
-  .success {
-    background-color: #4caf50;
+  body { font-family: Arial, sans-serif; margin: 20px; background: #f0f0f0; }
+  #container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; }
+  form { margin-bottom: 20px; }
+  input, button, select, textarea { width: 100%; padding: 8px; margin: 6px 0; box-sizing: border-box; }
+  #chatMessages { height: 300px; border: 1px solid #ccc; overflow-y: scroll; padding: 10px; background: #fafafa; }
+  #chatMessages div { margin-bottom: 8px; }
+  .message-user { font-weight: bold; }
+  .message-text { margin-left: 10px; }
+  #uploadFileLabel, #uploadPfpLabel {
+    display: inline-block;
+    margin-top: 10px;
+    background: #007bff;
     color: white;
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    font-weight: 600;
-  }
-
-  .profile-pic-preview {
-    margin-top: 0.8rem;
-    max-width: 150px;
-    max-height: 150px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 3px solid #0ef;
-    box-shadow: 0 0 8px #0efaa;
-  }
-
-  .upload-section {
-    margin-top: 1rem;
-    background: #111;
-    padding: 1rem;
-    border-radius: 8px;
-  }
-
-  .upload-section label {
-    display: block;
-    margin-bottom: 0.5rem;
-    color: #0ef;
-  }
-
-  .upload-section input[type="file"] {
-    background: #222;
-    color: #eee;
-  }
-
-  .user-info {
-    margin-top: 1rem;
-    background: #222;
-    padding: 1rem;
-    border-radius: 8px;
-  }
-
-  .logout-btn {
-    margin-top: 1rem;
-    background-color: #e74c3c;
-    color: white;
-    border: none;
-    padding: 0.8rem;
-    border-radius: 8px;
+    padding: 8px 12px;
+    border-radius: 4px;
     cursor: pointer;
-    font-weight: 700;
   }
-  .logout-btn:hover {
-    background-color: #c0392b;
-  }
-
+  #uploadFile, #uploadPfp { display: none; }
+  #logoutBtn { margin-top: 10px; background: #dc3545; color: white; border: none; padding: 10px; cursor: pointer; border-radius: 4px; }
 </style>
 </head>
 <body>
-  <div class="container">
-    <h1>User Panel</h1>
+<div id="container">
+  <h2>User Panel System</h2>
 
-    <div id="messages"></div>
-
-    <!-- Username Display -->
-    <div class="user-info" id="userInfo" style="display:none;">
-      <strong>Welcome, <span id="displayUsername"></span></strong>
-      <br />
-      <img id="pfpPreview" src="" alt="Profile Picture" class="profile-pic-preview" style="display:none;" />
-      <button id="logoutBtn" class="logout-btn">Logout</button>
-    </div>
-
-    <!-- Login/Register Form -->
-    <form id="authForm">
-      <label for="usernameInput">Username</label>
-      <input
-        type="text"
-        id="usernameInput"
-        name="username"
-        minlength="3"
-        maxlength="16"
-        required
-        placeholder="3 to 16 characters"
-        pattern="^[a-zA-Z0-9_]+$"
-        title="Alphanumeric and underscore only"
-      />
-
-      <label for="passwordInput">Password</label>
-      <input
-        type="password"
-        id="passwordInput"
-        name="password"
-        minlength="8"
-        required
-        placeholder="At least 8 characters"
-      />
-
-      <button type="submit" id="authSubmitBtn">Login</button>
-      <button type="button" id="toggleRegisterBtn" style="margin-top:0.5rem; background:#0a74da; color:#eee;">
-        Switch to Register
-      </button>
+  <div id="authSection">
+    <h3>Login</h3>
+    <form id="loginForm">
+      <input type="text" id="loginUsername" placeholder="Username" required minlength="3" maxlength="16" />
+      <input type="password" id="loginPassword" placeholder="Password" required minlength="8" />
+      <button type="submit">Login</button>
     </form>
-
-    <!-- Profile Picture Upload -->
-    <div class="upload-section" id="pfpSection" style="display:none;">
-      <label for="pfpUpload">Upload Profile Picture (PNG, JPG, JPEG, GIF, WEBP, BMP) - Max 10MB</label>
-      <input type="file" id="pfpUpload" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/bmp" />
-      <button id="pfpUploadBtn" disabled>Upload Profile Picture</button>
-    </div>
-
-    <!-- File Upload -->
-    <div class="upload-section" id="fileUploadSection" style="display:none;">
-      <label for="fileUpload">Upload Files (Max 125MB)</label>
-      <input type="file" id="fileUpload" />
-      <button id="fileUploadBtn" disabled>Upload File</button>
-    </div>
+    <p>Or <a href="#" id="showRegister">Register here</a></p>
   </div>
 
+  <div id="registerSection" style="display:none;">
+    <h3>Register</h3>
+    <form id="registerForm">
+      <input type="text" id="registerUsername" placeholder="Username (3-16 chars)" required minlength="3" maxlength="16" />
+      <input type="password" id="registerPassword" placeholder="Password (min 8 chars)" required minlength="8" />
+      <button type="submit">Register</button>
+    </form>
+    <p>Already have an account? <a href="#" id="showLogin">Login here</a></p>
+  </div>
+
+  <div id="userPanel" style="display:none;">
+    <h3>Welcome, <span id="usernameDisplay"></span> (<span id="roleDisplay"></span>)</h3>
+
+    <button id="logoutBtn">Logout</button>
+
+    <h4>Profile Picture</h4>
+    <label id="uploadPfpLabel" for="uploadPfp">Upload Profile Picture (Max 10MB)</label>
+    <input type="file" id="uploadPfp" accept="image/*" />
+
+    <h4>Chat</h4>
+    <div id="chatMessages"></div>
+
+    <form id="chatForm">
+      <textarea id="chatInput" placeholder="Type your message here..." rows="3" maxlength="1000"></textarea>
+      <label id="uploadFileLabel" for="uploadFile">Attach File (Max 125MB)</label>
+      <input type="file" id="uploadFile" />
+      <button type="submit">Send</button>
+    </form>
+
+    <div id="adminLogsSection" style="display:none;">
+      <h4>Admin Login Logs</h4>
+      <pre id="adminLogs"></pre>
+    </div>
+
+    <div id="superadminLogsSection" style="display:none;">
+      <h4>Superadmin Login Logs</h4>
+      <pre id="superadminLogs"></pre>
+    </div>
+  </div>
+</div>
+
 <script>
-  const authForm = document.getElementById('authForm');
-  const toggleRegisterBtn = document.getElementById('toggleRegisterBtn');
-  const authSubmitBtn = document.getElementById('authSubmitBtn');
-  const usernameInput = document.getElementById('usernameInput');
-  const passwordInput = document.getElementById('passwordInput');
-  const messagesDiv = document.getElementById('messages');
+  const authSection = document.getElementById('authSection');
+  const registerSection = document.getElementById('registerSection');
+  const userPanel = document.getElementById('userPanel');
+  const usernameDisplay = document.getElementById('usernameDisplay');
+  const roleDisplay = document.getElementById('roleDisplay');
+  const chatMessages = document.getElementById('chatMessages');
+  const chatForm = document.getElementById('chatForm');
+  const chatInput = document.getElementById('chatInput');
+  const uploadFile = document.getElementById('uploadFile');
+  const uploadPfp = document.getElementById('uploadPfp');
+  const adminLogsSection = document.getElementById('adminLogsSection');
+  const adminLogs = document.getElementById('adminLogs');
+  const superadminLogsSection = document.getElementById('superadminLogsSection');
+  const superadminLogs = document.getElementById('superadminLogs');
 
-  const userInfoDiv = document.getElementById('userInfo');
-  const displayUsernameSpan = document.getElementById('displayUsername');
-  const logoutBtn = document.getElementById('logoutBtn');
-
-  const pfpSection = document.getElementById('pfpSection');
-  const pfpUploadInput = document.getElementById('pfpUpload');
-  const pfpUploadBtn = document.getElementById('pfpUploadBtn');
-  const pfpPreview = document.getElementById('pfpPreview');
-
-  const fileUploadSection = document.getElementById('fileUploadSection');
-  const fileUploadInput = document.getElementById('fileUpload');
-  const fileUploadBtn = document.getElementById('fileUploadBtn');
-
-  let isRegisterMode = false;
-
-  function showMessage(msg, type = 'error') {
-    messagesDiv.innerHTML = `<div class="${type}">${msg}</div>`;
-    setTimeout(() => {
-      messagesDiv.innerHTML = '';
-    }, 4000);
-  }
-
-  // Toggle between Login and Register
-  toggleRegisterBtn.addEventListener('click', () => {
-    isRegisterMode = !isRegisterMode;
-    authSubmitBtn.textContent = isRegisterMode ? 'Register' : 'Login';
-    toggleRegisterBtn.textContent = isRegisterMode ? 'Switch to Login' : 'Switch to Register';
-    clearMessages();
-  });
-
-  function clearMessages() {
-    messagesDiv.innerHTML = '';
-  }
-
-  // Enable or disable upload buttons based on file selection and size
-  pfpUploadInput.addEventListener('change', () => {
-    const file = pfpUploadInput.files[0];
-    if (!file) {
-      pfpUploadBtn.disabled = true;
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      showMessage('Profile picture must be 10MB or smaller');
-      pfpUploadBtn.disabled = true;
-      return;
-    }
-    pfpUploadBtn.disabled = false;
-
-    // Show preview
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      pfpPreview.src = e.target.result;
-      pfpPreview.style.display = 'block';
-    };
-    reader.readAsDataURL(file);
-  });
-
-  fileUploadInput.addEventListener('change', () => {
-    const file = fileUploadInput.files[0];
-    if (!file) {
-      fileUploadBtn.disabled = true;
-      return;
-    }
-    if (file.size > 125 * 1024 * 1024) {
-      showMessage('File must be 125MB or smaller');
-      fileUploadBtn.disabled = true;
-      return;
-    }
-    fileUploadBtn.disabled = false;
-  });
-
-  // Logout Handler
-  logoutBtn.addEventListener('click', () => {
-    fetch('/logout', { method: 'POST' })
-      .then(res => {
-        if (res.ok) {
-          location.reload();
-        } else {
-          showMessage('Failed to logout');
-        }
-      })
-      .catch(() => showMessage('Failed to logout'));
-  });
-
-  // Auth form submit
-  authForm.addEventListener('submit', e => {
+  // Toggle between login/register
+  document.getElementById('showRegister').addEventListener('click', e => {
     e.preventDefault();
-    clearMessages();
-
-    const username = usernameInput.value.trim();
-    const password = passwordInput.value;
-
-    // Validate username pattern (alphanumeric + underscore)
-    if (!/^[a-zA-Z0-9_]{3,16}$/.test(username)) {
-      showMessage('Username must be 3-16 characters: letters, numbers, underscore only.');
-      return;
-    }
-    if (password.length < 8) {
-      showMessage('Password must be at least 8 characters.');
-      return;
-    }
-
-    const endpoint = isRegisterMode ? '/register' : '/login';
-
-    fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    })
-      .then(async res => {
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.message || 'Unknown error');
-        }
-        showMessage(data.message || 'Success', 'success');
-        if (!isRegisterMode) {
-          // Login success
-          setupUserPanel(data.user);
-        } else {
-          // After registration, switch to login mode
-          isRegisterMode = false;
-          authSubmitBtn.textContent = 'Login';
-          toggleRegisterBtn.textContent = 'Switch to Register';
-        }
-      })
-      .catch(err => {
-        showMessage(err.message || 'Request failed');
-      });
+    authSection.style.display = 'none';
+    registerSection.style.display = 'block';
+  });
+  document.getElementById('showLogin').addEventListener('click', e => {
+    e.preventDefault();
+    registerSection.style.display = 'none';
+    authSection.style.display = 'block';
   });
 
-  // Profile picture upload handler
-  pfpUploadBtn.addEventListener('click', () => {
-    const file = pfpUploadInput.files[0];
-    if (!file) {
-      showMessage('No profile picture selected');
+  // Check if logged in on page load
+  async function checkLogin() {
+    const res = await fetch('/api/me');
+    if (res.ok) {
+      const user = await res.json();
+      showUserPanel(user);
+      fetchChatMessages();
+      if(user.role === 'admin' || user.role === 'superadmin') loadAdminLogs();
+      if(user.role === 'superadmin') loadSuperadminLogs();
+    } else {
+      showLoginForm();
+    }
+  }
+
+  function showLoginForm() {
+    authSection.style.display = 'block';
+    registerSection.style.display = 'none';
+    userPanel.style.display = 'none';
+  }
+
+  function showUserPanel(user) {
+    authSection.style.display = 'none';
+    registerSection.style.display = 'none';
+    userPanel.style.display = 'block';
+    usernameDisplay.textContent = user.username;
+    roleDisplay.textContent = user.role;
+
+    if(user.role === 'admin' || user.role === 'superadmin') {
+      adminLogsSection.style.display = 'block';
+    }
+    if(user.role === 'superadmin') {
+      superadminLogsSection.style.display = 'block';
+    }
+  }
+
+  // Login form submit
+  document.getElementById('loginForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const username = document.getElementById('loginUsername').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ username, password })
+    });
+    if(res.ok) {
+      const user = await res.json();
+      showUserPanel(user);
+      fetchChatMessages();
+      if(user.role === 'admin' || user.role === 'superadmin') loadAdminLogs();
+      if(user.role === 'superadmin') loadSuperadminLogs();
+    } else {
+      alert('Login failed');
+    }
+  });
+
+  // Register form submit
+  document.getElementById('registerForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const username = document.getElementById('registerUsername').value.trim();
+    const password = document.getElementById('registerPassword').value;
+    const res = await fetch('/api/register', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ username, password })
+    });
+    if(res.ok) {
+      alert('Registration successful. You can now log in.');
+      registerSection.style.display = 'none';
+      authSection.style.display = 'block';
+    } else {
+      const err = await res.json();
+      alert('Registration failed: ' + (err.error || 'Unknown error'));
+    }
+  });
+
+  // Logout button
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await fetch('/api/logout', { method: 'POST' });
+    showLoginForm();
+  });
+
+  // Fetch chat messages and show
+  async function fetchChatMessages() {
+    const res = await fetch('/api/chat/messages');
+    if(res.ok) {
+      const messages = await res.json();
+      chatMessages.innerHTML = '';
+      for(const msg of messages) {
+        const div = document.createElement('div');
+        div.innerHTML = `<span class="message-user">${msg.username}:</span> <span class="message-text">${escapeHtml(msg.message)}</span>` +
+          (msg.fileUrl ? ` <a href="${msg.fileUrl}" target="_blank">(file)</a>` : '') +
+          (msg.pfpFilename ? ` <img src="/uploads/pfps/${msg.pfpFilename}" alt="pfp" style="width:20px;height:20px;border-radius:50%;vertical-align:middle;">` : '');
+        chatMessages.appendChild(div);
+      }
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+  }
+
+  // Escape HTML to prevent XSS
+  function escapeHtml(text) {
+    return text.replace(/[&<>"']/g, (m) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[m]);
+  }
+
+  // Chat form submit (send message + optional file)
+  chatForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const formData = new FormData();
+    const msg = chatInput.value.trim();
+    if (!msg && uploadFile.files.length === 0) {
+      alert('Please enter a message or attach a file');
       return;
     }
+    formData.append('message', msg);
+    if(uploadFile.files.length > 0) formData.append('file', uploadFile.files[0]);
 
+    const res = await fetch('/api/chat/send', {
+      method: 'POST',
+      body: formData
+    });
+    if(res.ok) {
+      chatInput.value = '';
+      uploadFile.value = '';
+      fetchChatMessages();
+    } else {
+      alert('Failed to send message');
+    }
+  });
+
+  // Profile picture upload
+  uploadPfp.addEventListener('change', async () => {
+    if(uploadPfp.files.length === 0) return;
+    const file = uploadPfp.files[0];
+    if(file.size > 10 * 1024 * 1024) {
+      alert('Profile picture must be under 10MB');
+      return;
+    }
     const formData = new FormData();
     formData.append('pfp', file);
-
-    pfpUploadBtn.disabled = true;
-
-    fetch('/upload-pfp', {
+    const res = await fetch('/api/upload/pfp', {
       method: 'POST',
-      body: formData,
-    })
-      .then(async res => {
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || 'Upload failed');
-        showMessage('Profile picture uploaded!', 'success');
-        if (data.pfpUrl) {
-          pfpPreview.src = data.pfpUrl + '?' + new Date().getTime(); // prevent cache
-          pfpPreview.style.display = 'block';
-        }
-      })
-      .catch(err => showMessage(err.message || 'Upload failed'))
-      .finally(() => {
-        pfpUploadBtn.disabled = false;
-        pfpUploadInput.value = '';
-      });
-  });
-
-  // General file upload handler
-  fileUploadBtn.addEventListener('click', () => {
-    const file = fileUploadInput.files[0];
-    if (!file) {
-      showMessage('No file selected');
-      return;
-    }
-    const formData = new FormData();
-    formData.append('file', file);
-
-    fileUploadBtn.disabled = true;
-
-    fetch('/upload-file', {
-      method: 'POST',
-      body: formData,
-    })
-      .then(async res => {
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || 'Upload failed');
-        showMessage('File uploaded successfully!', 'success');
-      })
-      .catch(err => showMessage(err.message || 'Upload failed'))
-      .finally(() => {
-        fileUploadBtn.disabled = false;
-        fileUploadInput.value = '';
-      });
-  });
-
-  // Setup user panel UI after login
-  function setupUserPanel(user) {
-    authForm.style.display = 'none';
-    pfpSection.style.display = 'block';
-    fileUploadSection.style.display = 'block';
-    userInfoDiv.style.display = 'block';
-
-    displayUsernameSpan.textContent = user.username || 'Unknown User';
-
-    if (user.pfpUrl) {
-      pfpPreview.src = user.pfpUrl + '?' + new Date().getTime();
-      pfpPreview.style.display = 'block';
+      body: formData
+    });
+    if(res.ok) {
+      alert('Profile picture uploaded!');
+      fetchChatMessages(); // refresh to show pfp in chat
     } else {
-      pfpPreview.style.display = 'none';
+      alert('Failed to upload profile picture');
+    }
+  });
+
+  // Load admin logs
+  async function loadAdminLogs() {
+    const res = await fetch('/api/admin/logs');
+    if(res.ok) {
+      const logs = await res.json();
+      adminLogs.textContent = JSON.stringify(logs, null, 2);
+    }
+  }
+  // Load superadmin logs
+  async function loadSuperadminLogs() {
+    const res = await fetch('/api/superadmin/logs');
+    if(res.ok) {
+      const logs = await res.json();
+      superadminLogs.textContent = JSON.stringify(logs, null, 2);
     }
   }
 
-  // Check if already logged in on page load
-  function checkSession() {
-    fetch('/session')
-      .then(res => res.json())
-      .then(data => {
-        if (data.loggedIn) {
-          setupUserPanel(data.user);
-        }
-      })
-      .catch(() => {});
-  }
+  // Initial check for session
+  checkLogin();
 
-  checkSession();
+  // Optional: Poll chat messages every 10 seconds
+  setInterval(fetchChatMessages, 10000);
 </script>
 </body>
 </html>

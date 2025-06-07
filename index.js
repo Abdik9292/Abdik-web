@@ -298,12 +298,11 @@ app.post('/api/upload/pfp', requireLogin, pfpUpload.single('pfp'), async (req, r
 // Upload general file route
 app.post('/api/upload/file', requireLogin, fileUpload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
-    const url = `/uploads/files/${req.file.filename}`;
-    res.json({ success: true, url });
+    res.json({ success: true, filename: req.file.filename, originalname: req.file.originalname });
 });
 
 // -------------------
-// Chat routes
+// Chat API
 
 // Get last 50 chat messages
 app.get('/api/chat', requireLogin, (req, res) => {
@@ -311,43 +310,42 @@ app.get('/api/chat', requireLogin, (req, res) => {
     res.json(last50);
 });
 
-// Post new chat message
+// Post a chat message (text only)
 app.post('/api/chat', requireLogin, (req, res) => {
-    const { message, fileUrl } = req.body;
-    if (!message && !fileUrl) {
-        return res.status(400).json({ error: 'Message or file required.' });
+    const { message } = req.body;
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
+        return res.status(400).json({ error: 'Message cannot be empty.' });
+    }
+    if (message.length > 500) {
+        return res.status(400).json({ error: 'Message too long (max 500 characters).' });
     }
 
-    // Limit message length
-    if (message && message.length > 1000) {
-        return res.status(400).json({ error: 'Message too long.' });
-    }
+    const username = req.session.user.username;
+    const pfpFilename = req.session.user.pfpFilename || null;
 
     const chatEntry = {
-        username: req.session.user.username,
-        role: req.session.user.role,
-        message: message || '',
+        username,
+        message: message.trim(),
         timestamp: new Date().toISOString(),
-        pfpFilename: req.session.user.pfpFilename || null,
-        fileUrl: fileUrl || null
+        pfpFilename
     };
     chatMessages.push(chatEntry);
     if (chatMessages.length > 1250) chatMessages.shift();
     saveJSON(CHAT_FILE, chatMessages);
 
-    res.json({ success: true });
+    res.json({ success: true, message: chatEntry });
 });
 
 // -------------------
-// Admin routes for login logs
+// Logs API
 
-// Get admin logs (admins only)
-app.get('/api/admin/logs', requireRole('admin', 'superadmin'), (req, res) => {
+// Admin login logs
+app.get('/api/logs/admin', requireRole('admin', 'superadmin'), (req, res) => {
     res.json(logAdmin);
 });
 
-// Get superadmin logs (superadmin only)
-app.get('/api/superadmin/logs', requireRole('superadmin'), (req, res) => {
+// Superadmin login logs
+app.get('/api/logs/superadmin', requireRole('superadmin'), (req, res) => {
     res.json(logSuperadmin);
 });
 

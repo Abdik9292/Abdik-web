@@ -58,8 +58,12 @@ function saveJSON(file, data) {
     }
 }
 
-let users = loadJSON(USERS_FILE, {}); // { username: { passwordHash, role, pfpFilename } }
-let chatMessages = loadJSON(CHAT_FILE, []); // [{ username, message, timestamp, pfpFilename, fileUrl? }]
+let users = loadJSON(USERS_FILE, {}); 
+// users: { username: { id, passwordHash, role, pfpFilename } }
+
+let chatMessages = loadJSON(CHAT_FILE, []); 
+// chatMessages: [{ username, message, timestamp, pfpFilename, fileUrl? }]
+
 let logAdmin = loadJSON(LOG_ADMIN_FILE, []);
 let logSuperadmin = loadJSON(LOG_SUPERADMIN_FILE, []);
 
@@ -90,6 +94,10 @@ function validatePassword(pw) {
 
 function genUniqueFilename(ext) {
     return crypto.randomBytes(16).toString('hex') + ext;
+}
+
+function genUniqueId() {
+    return crypto.randomBytes(12).toString('hex');
 }
 
 function logLogin(username, role, success, ip) {
@@ -144,14 +152,15 @@ app.post('/api/register', async (req, res) => {
         }
 
         const passwordHash = await bcrypt.hash(password, 12);
+        const id = genUniqueId();
 
-        users[username] = { passwordHash, role: 'user', pfpFilename: null };
+        users[username] = { id, passwordHash, role: 'user', pfpFilename: null };
         saveJSON(USERS_FILE, users);
 
-        req.session.user = { username, role: 'user' };
+        req.session.user = { username, role: 'user', id, pfpFilename: null };
         logLogin(username, 'user', true, req.ip);
 
-        res.json({ success: true, username, role: 'user' });
+        res.json({ success: true, username, role: 'user', id, pfpFilename: null });
     } catch (e) {
         console.error('Register error:', e);
         res.status(500).json({ error: 'Internal server error.' });
@@ -171,9 +180,9 @@ app.post('/api/login', async (req, res) => {
             }
             const match = await bcrypt.compare(password, SUPERADMIN_PASSWORD_HASH);
             if (match) {
-                req.session.user = { username: SUPERADMIN_USERNAME, role: 'superadmin', pfpFilename: null };
+                req.session.user = { username: SUPERADMIN_USERNAME, role: 'superadmin', id: null, pfpFilename: null };
                 logLogin(username, 'superadmin', true, req.ip);
-                return res.json({ success: true, username, role: 'superadmin' });
+                return res.json({ success: true, username, role: 'superadmin', id: null, pfpFilename: null });
             } else {
                 logLogin(username, 'superadmin', false, req.ip);
                 return res.status(401).json({ error: 'Invalid credentials.' });
@@ -187,9 +196,9 @@ app.post('/api/login', async (req, res) => {
             }
             const match = await bcrypt.compare(password, ADMIN_PASSWORD_HASH);
             if (match) {
-                req.session.user = { username: ADMIN_USERNAME, role: 'admin', pfpFilename: null };
+                req.session.user = { username: ADMIN_USERNAME, role: 'admin', id: null, pfpFilename: null };
                 logLogin(username, 'admin', true, req.ip);
-                return res.json({ success: true, username, role: 'admin' });
+                return res.json({ success: true, username, role: 'admin', id: null, pfpFilename: null });
             } else {
                 logLogin(username, 'admin', false, req.ip);
                 return res.status(401).json({ error: 'Invalid credentials.' });
@@ -208,10 +217,10 @@ app.post('/api/login', async (req, res) => {
             return res.status(401).json({ error: 'Invalid credentials.' });
         }
 
-        req.session.user = { username, role: user.role, pfpFilename: user.pfpFilename || null };
+        req.session.user = { username, role: user.role, id: user.id, pfpFilename: user.pfpFilename || null };
         logLogin(username, user.role, true, req.ip);
 
-        res.json({ success: true, username, role: user.role, pfpFilename: user.pfpFilename || null });
+        res.json({ success: true, username, role: user.role, id: user.id, pfpFilename: user.pfpFilename || null });
     } catch (e) {
         console.error('Login error:', e);
         res.status(500).json({ error: 'Internal server error.' });
@@ -243,114 +252,122 @@ const pfpUpload = multer({
         if (allowedTypes.test(ext.substring(1))) {
             cb(null, true);
         } else {
-            cb(new Error('Only image files are allowed (jpeg, jpg, png, gif, bmp).'));
+            cb(new Error('Only image files are allowed (jpeg, png, gif, bmp).'));
         }
     }
-});
+}).single('pfp');
 
-// General file upload (125 MB limit)
+// File upload in chat (125 MB limit)
 const fileStorage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, FILES_DIR);
-    },
+    destination: FILES_DIR,
     filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname).toLowerCase();
-        cb(null, genUniqueFilename(ext));
+        const uniqueName = genUniqueFilename(path.extname(file.originalname));
+        cb(null, uniqueName);
     }
 });
-const fileUpload = multer({
+const chatFileUpload = multer({
     storage: fileStorage,
-    limits: { fileSize: 125 * 1024 * 1024 } // 125 MB
-});
+    limits: { fileSize: 125 * 1024 * 1024 }, // 125 MB
+}).single('file');
 
-// Upload profile picture route
-app.post('/api/upload/pfp', requireLogin, pfpUpload.single('pfp'), async (req, res) => {
-    try {
-        if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
+// Upload profile picture
+app.post('/api/upload-pfp', requireLogin, (req, res) => {
+    pfpUpload(req, res, async function (err) {
+        if (err) {
+            return res.status(400).json({ error: err.message });
+        }
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded.' });
+        }
 
-        // Resize and blur image with sharp
-        const filename = genUniqueFilename(path.extname(req.file.originalname));
+        // Resize and blur using sharp, save to disk
+        const ext = path.extname(req.file.originalname).toLowerCase();
+        const filename = genUniqueFilename(ext);
         const filepath = path.join(PFP_DIR, filename);
 
-        // Resize to 128x128 and blur edges softly
-        await sharp(req.file.buffer)
-            .resize(128, 128)
-            .blur(0.5)
-            .toFile(filepath);
+        try {
+            await sharp(req.file.buffer)
+                .resize(128, 128, { fit: 'cover' })
+                .blur(1)
+                .toFile(filepath);
 
-        // Save filename to user data
-        const username = req.session.user.username;
-        if (users[username]) {
-            users[username].pfpFilename = filename;
-            saveJSON(USERS_FILE, users);
+            // Update user data and session
+            const username = req.session.user.username;
+            if (users[username]) {
+                users[username].pfpFilename = filename;
+                saveJSON(USERS_FILE, users);
+            }
+            req.session.user.pfpFilename = filename;
+
+            res.json({ success: true, pfpFilename: filename });
+        } catch (e) {
+            console.error('PFP processing error:', e);
+            res.status(500).json({ error: 'Image processing failed.' });
+        }
+    });
+});
+
+// Send chat message (text + optional file)
+app.post('/api/chat/send', requireLogin, (req, res) => {
+    chatFileUpload(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({ error: err.message });
         }
 
-        // Update session info too
-        req.session.user.pfpFilename = filename;
+        const messageText = req.body.message?.trim();
+        if (!messageText && !req.file) {
+            return res.status(400).json({ error: 'Message text or file required.' });
+        }
 
-        res.json({ success: true, filename });
-    } catch (e) {
-        console.error('PFP upload error:', e);
-        res.status(500).json({ error: 'Failed to process image.' });
-    }
+        const username = req.session.user.username;
+        const pfpFilename = req.session.user.pfpFilename || null;
+        const timestamp = new Date().toISOString();
+
+        let newMessage = {
+            username,
+            message: messageText || '',
+            timestamp,
+            pfpFilename
+        };
+
+        if (req.file) {
+            // Save file URL relative to /uploads/files/
+            newMessage.fileUrl = `/uploads/files/${req.file.filename}`;
+            newMessage.fileOriginalName = req.file.originalname;
+        }
+
+        chatMessages.push(newMessage);
+        // Limit to last 1250 messages
+        if (chatMessages.length > 1250) chatMessages.shift();
+
+        saveJSON(CHAT_FILE, chatMessages);
+
+        res.json({ success: true, message: newMessage });
+    });
 });
 
-// Upload general file route
-app.post('/api/upload/file', requireLogin, fileUpload.single('file'), (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
-    res.json({ success: true, filename: req.file.filename, originalname: req.file.originalname });
-});
-
-// -------------------
-// Chat API
-
-// Get last 50 chat messages
+// Get chat messages (last 50)
 app.get('/api/chat', requireLogin, (req, res) => {
-    const last50 = chatMessages.slice(-50);
-    res.json(last50);
+    const lastMessages = chatMessages.slice(-50);
+    res.json(lastMessages);
 });
 
-// Post a chat message (text only)
-app.post('/api/chat', requireLogin, (req, res) => {
-    const { message } = req.body;
-    if (!message || typeof message !== 'string' || message.trim().length === 0) {
-        return res.status(400).json({ error: 'Message cannot be empty.' });
-    }
-    if (message.length > 500) {
-        return res.status(400).json({ error: 'Message too long (max 500 characters).' });
-    }
-
-    const username = req.session.user.username;
-    const pfpFilename = req.session.user.pfpFilename || null;
-
-    const chatEntry = {
-        username,
-        message: message.trim(),
-        timestamp: new Date().toISOString(),
-        pfpFilename
-    };
-    chatMessages.push(chatEntry);
-    if (chatMessages.length > 1250) chatMessages.shift();
-    saveJSON(CHAT_FILE, chatMessages);
-
-    res.json({ success: true, message: chatEntry });
-});
-
-// -------------------
-// Logs API
-
-// Admin login logs
-app.get('/api/logs/admin', requireRole('admin', 'superadmin'), (req, res) => {
+// Admin: get user login logs
+app.get('/api/logs/admin', requireLogin, requireRole('admin', 'superadmin'), (req, res) => {
     res.json(logAdmin);
 });
 
-// Superadmin login logs
-app.get('/api/logs/superadmin', requireRole('superadmin'), (req, res) => {
+// Superadmin: get all logs
+app.get('/api/logs/superadmin', requireLogin, requireRole('superadmin'), (req, res) => {
     res.json(logSuperadmin);
 });
 
-// -------------------
+// Catch-all for frontend
+app.get('*', (req, res) => {
+    res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+});
+
 // Start server
 app.listen(PORT, () => {
-    console.log(`Server started on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });

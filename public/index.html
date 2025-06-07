@@ -5,25 +5,210 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>User Panel System</title>
 <style>
-  body { font-family: Arial, sans-serif; margin: 20px; background: #f0f0f0; }
-  #container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; }
-  form { margin-bottom: 20px; }
-  input, button, select, textarea { width: 100%; padding: 8px; margin: 6px 0; box-sizing: border-box; }
-  #chatMessages { height: 300px; border: 1px solid #ccc; overflow-y: scroll; padding: 10px; background: #fafafa; }
-  #chatMessages div { margin-bottom: 8px; }
-  .message-user { font-weight: bold; }
-  .message-text { margin-left: 10px; }
-  #uploadFileLabel, #uploadPfpLabel {
+  /* Reset and base */
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0; 
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #121212;
+    color: #eee;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+    min-height: 100vh;
+  }
+  #container {
+    background: #1e1e1e;
+    max-width: 700px;
+    width: 100%;
+    border-radius: 12px;
+    padding: 30px 40px;
+    box-shadow:
+      0 4px 8px rgba(0,0,0,0.6),
+      0 0 15px #6200eeaa;
+  }
+  h2, h3, h4 {
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: #bb86fc;
+  }
+  h4 {
+    margin-top: 30px;
+  }
+
+  /* Forms */
+  form {
+    margin-bottom: 20px;
+  }
+  input[type="text"],
+  input[type="password"],
+  textarea {
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 8px;
+    color: #ddd;
+    padding: 12px 15px;
+    font-size: 1rem;
+    width: 100%;
+    transition: border-color 0.3s ease;
+    resize: vertical;
+  }
+  input[type="text"]:focus,
+  input[type="password"]:focus,
+  textarea:focus {
+    outline: none;
+    border-color: #bb86fc;
+    background: #3a3a3a;
+  }
+
+  button {
+    background: #6200ee;
+    border: none;
+    padding: 12px 18px;
+    border-radius: 8px;
+    color: white;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.3s ease;
+    width: 100%;
+  }
+  button:hover {
+    background: #7f39fb;
+  }
+
+  a {
+    color: #bb86fc;
+    cursor: pointer;
+    text-decoration: none;
+    font-weight: 600;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+
+  p {
+    margin-top: 0;
+    margin-bottom: 20px;
+  }
+
+  /* Chat Messages */
+  #chatMessages {
+    height: 300px;
+    overflow-y: auto;
+    background: #292929;
+    border-radius: 10px;
+    padding: 15px;
+    box-shadow: inset 0 0 5px #000;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    user-select: text;
+  }
+  #chatMessages div {
+    margin-bottom: 12px;
+    word-wrap: break-word;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .message-user {
+    font-weight: 700;
+    color: #bb86fc;
+    flex-shrink: 0;
+  }
+  .message-text {
+    color: #ddd;
+    flex: 1;
+  }
+  #chatMessages img.pfp-small {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
+    vertical-align: middle;
+    box-shadow: 0 0 6px #6200ee88;
+  }
+  #chatMessages a {
+    color: #03dac5;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  #chatMessages a:hover {
+    text-decoration: underline;
+  }
+
+  /* File upload labels */
+  #uploadFileLabel,
+  #uploadPfpLabel {
     display: inline-block;
     margin-top: 10px;
-    background: #007bff;
-    color: white;
-    padding: 8px 12px;
-    border-radius: 4px;
+    background: #bb86fc;
+    color: #121212;
+    padding: 10px 16px;
+    border-radius: 8px;
     cursor: pointer;
+    font-weight: 700;
+    transition: background 0.3s ease;
+    user-select: none;
   }
-  #uploadFile, #uploadPfp { display: none; }
-  #logoutBtn { margin-top: 10px; background: #dc3545; color: white; border: none; padding: 10px; cursor: pointer; border-radius: 4px; }
+  #uploadFileLabel:hover,
+  #uploadPfpLabel:hover {
+    background: #d3b8ff;
+  }
+  #uploadFile,
+  #uploadPfp {
+    display: none;
+  }
+
+  /* Logout button */
+  #logoutBtn {
+    margin-top: 20px;
+    background: #cf6679;
+    color: white;
+    border: none;
+    padding: 12px 18px;
+    cursor: pointer;
+    border-radius: 8px;
+    font-weight: 700;
+    transition: background 0.3s ease;
+    width: 100%;
+  }
+  #logoutBtn:hover {
+    background: #ff869a;
+  }
+
+  /* Chat input */
+  #chatInput {
+    margin-top: 10px;
+    min-height: 70px;
+  }
+
+  /* Admin and Superadmin Logs */
+  #adminLogsSection,
+  #superadminLogsSection {
+    margin-top: 30px;
+    background: #2e2e2e;
+    border-radius: 10px;
+    padding: 15px;
+    font-family: monospace;
+    max-height: 200px;
+    overflow-y: auto;
+    color: #ccc;
+    white-space: pre-wrap;
+  }
+
+  /* Responsive */
+  @media (max-width: 480px) {
+    #container {
+      padding: 20px;
+    }
+    button, #uploadFileLabel, #uploadPfpLabel {
+      font-size: 0.9rem;
+      padding: 10px;
+    }
+  }
 </style>
 </head>
 <body>
@@ -32,9 +217,9 @@
 
   <div id="authSection">
     <h3>Login</h3>
-    <form id="loginForm">
-      <input type="text" id="loginUsername" placeholder="Username" required minlength="3" maxlength="16" />
-      <input type="password" id="loginPassword" placeholder="Password" required minlength="8" />
+    <form id="loginForm" autocomplete="off">
+      <input type="text" id="loginUsername" placeholder="Username" required minlength="3" maxlength="16" autocomplete="username" />
+      <input type="password" id="loginPassword" placeholder="Password" required minlength="8" autocomplete="current-password" />
       <button type="submit">Login</button>
     </form>
     <p>Or <a href="#" id="showRegister">Register here</a></p>
@@ -42,9 +227,9 @@
 
   <div id="registerSection" style="display:none;">
     <h3>Register</h3>
-    <form id="registerForm">
-      <input type="text" id="registerUsername" placeholder="Username (3-16 chars)" required minlength="3" maxlength="16" />
-      <input type="password" id="registerPassword" placeholder="Password (min 8 chars)" required minlength="8" />
+    <form id="registerForm" autocomplete="off">
+      <input type="text" id="registerUsername" placeholder="Username (3-16 chars)" required minlength="3" maxlength="16" autocomplete="username" />
+      <input type="password" id="registerPassword" placeholder="Password (min 8 chars)" required minlength="8" autocomplete="new-password" />
       <button type="submit">Register</button>
     </form>
     <p>Already have an account? <a href="#" id="showLogin">Login here</a></p>
@@ -62,7 +247,7 @@
     <h4>Chat</h4>
     <div id="chatMessages"></div>
 
-    <form id="chatForm">
+    <form id="chatForm" autocomplete="off">
       <textarea id="chatInput" placeholder="Type your message here..." rows="3" maxlength="1000"></textarea>
       <label id="uploadFileLabel" for="uploadFile">Attach File (Max 125MB)</label>
       <input type="file" id="uploadFile" />
@@ -82,6 +267,7 @@
 </div>
 
 <script>
+  // Elements
   const authSection = document.getElementById('authSection');
   const registerSection = document.getElementById('registerSection');
   const userPanel = document.getElementById('userPanel');
@@ -111,22 +297,24 @@
 
   // Check if logged in on page load
   async function checkLogin() {
-    const res = await fetch('/api/me');
-    if (res.ok) {
-      const user = await res.json();
-      showUserPanel(user);
-      fetchChatMessages();
-      if(user.role === 'admin' || user.role === 'superadmin') loadAdminLogs();
-      if(user.role === 'superadmin') loadSuperadminLogs();
-    } else {
-      showLoginForm();
+    try {
+      const res = await fetch('/api/me');
+      if (res.ok) {
+        const user = await res.json();
+        showUserPanel(user);
+        fetchChatMessages();
+        if (user.role === 'admin' || user.role === 'superadmin') {
+          loadAdminLogs();
+        }
+        if (user.role === 'superadmin') {
+          loadSuperadminLogs();
+        }
+      } else {
+        showAuth();
+      }
+    } catch {
+      showAuth();
     }
-  }
-
-  function showLoginForm() {
-    authSection.style.display = 'block';
-    registerSection.style.display = 'none';
-    userPanel.style.display = 'none';
   }
 
   function showUserPanel(user) {
@@ -135,13 +323,12 @@
     userPanel.style.display = 'block';
     usernameDisplay.textContent = user.username;
     roleDisplay.textContent = user.role;
+  }
 
-    if(user.role === 'admin' || user.role === 'superadmin') {
-      adminLogsSection.style.display = 'block';
-    }
-    if(user.role === 'superadmin') {
-      superadminLogsSection.style.display = 'block';
-    }
+  function showAuth() {
+    authSection.style.display = 'block';
+    registerSection.style.display = 'none';
+    userPanel.style.display = 'none';
   }
 
   // Login form submit
@@ -149,19 +336,21 @@
     e.preventDefault();
     const username = document.getElementById('loginUsername').value.trim();
     const password = document.getElementById('loginPassword').value;
+    if (!username || !password) return alert('Fill in all fields.');
+
     const res = await fetch('/api/login', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
-    if(res.ok) {
+    if (res.ok) {
       const user = await res.json();
       showUserPanel(user);
       fetchChatMessages();
-      if(user.role === 'admin' || user.role === 'superadmin') loadAdminLogs();
-      if(user.role === 'superadmin') loadSuperadminLogs();
+      if (user.role === 'admin' || user.role === 'superadmin') loadAdminLogs();
+      if (user.role === 'superadmin') loadSuperadminLogs();
     } else {
-      alert('Login failed');
+      alert('Login failed. Check credentials.');
     }
   });
 
@@ -170,120 +359,197 @@
     e.preventDefault();
     const username = document.getElementById('registerUsername').value.trim();
     const password = document.getElementById('registerPassword').value;
+    if (username.length < 3 || username.length > 16) {
+      return alert('Username must be between 3 and 16 characters.');
+    }
+    if (password.length < 8) {
+      return alert('Password must be at least 8 characters.');
+    }
     const res = await fetch('/api/register', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
-    if(res.ok) {
-      alert('Registration successful. You can now log in.');
+    if (res.ok) {
+      alert('Registration successful! Please login.');
       registerSection.style.display = 'none';
       authSection.style.display = 'block';
     } else {
-      const err = await res.json();
-      alert('Registration failed: ' + (err.error || 'Unknown error'));
+      const data = await res.json();
+      alert('Registration failed: ' + (data.message || 'Unknown error'));
     }
   });
 
-  // Logout button
+  // Logout
   document.getElementById('logoutBtn').addEventListener('click', async () => {
     await fetch('/api/logout', { method: 'POST' });
-    showLoginForm();
+    showAuth();
+    chatMessages.innerHTML = '';
+    chatInput.value = '';
+    adminLogsSection.style.display = 'none';
+    superadminLogsSection.style.display = 'none';
   });
 
-  // Fetch chat messages and show
+  // Fetch and display chat messages
   async function fetchChatMessages() {
-    const res = await fetch('/api/chat/messages');
-    if(res.ok) {
+    try {
+      const res = await fetch('/api/chat/messages');
+      if (!res.ok) throw new Error('Failed to fetch chat messages');
       const messages = await res.json();
+
       chatMessages.innerHTML = '';
-      for(const msg of messages) {
-        const div = document.createElement('div');
-        div.innerHTML = `<span class="message-user">${msg.username}:</span> <span class="message-text">${escapeHtml(msg.message)}</span>` +
-          (msg.fileUrl ? ` <a href="${msg.fileUrl}" target="_blank">(file)</a>` : '') +
-          (msg.pfpFilename ? ` <img src="/uploads/pfps/${msg.pfpFilename}" alt="pfp" style="width:20px;height:20px;border-radius:50%;vertical-align:middle;">` : '');
-        chatMessages.appendChild(div);
+      for (const msg of messages) {
+        const msgDiv = document.createElement('div');
+
+        // Profile picture thumbnail if exists
+        if (msg.pfp) {
+          const img = document.createElement('img');
+          img.src = msg.pfp;
+          img.alt = msg.username + "'s profile picture";
+          img.className = 'pfp-small';
+          msgDiv.appendChild(img);
+        }
+
+        // Username
+        const userSpan = document.createElement('span');
+        userSpan.textContent = msg.username + ': ';
+        userSpan.className = 'message-user';
+        msgDiv.appendChild(userSpan);
+
+        // Message text or file link
+        const textSpan = document.createElement('span');
+        textSpan.className = 'message-text';
+
+        // If message contains a file link, show clickable link
+        if (msg.file) {
+          const fileLink = document.createElement('a');
+          fileLink.href = msg.file.url;
+          fileLink.target = '_blank';
+          fileLink.textContent = msg.file.name;
+          textSpan.appendChild(fileLink);
+          if (msg.message) {
+            textSpan.appendChild(document.createTextNode(' - ' + msg.message));
+          }
+        } else {
+          textSpan.textContent = msg.message;
+        }
+        msgDiv.appendChild(textSpan);
+
+        chatMessages.appendChild(msgDiv);
       }
       chatMessages.scrollTop = chatMessages.scrollHeight;
+    } catch (err) {
+      console.error(err);
     }
   }
 
-  // Escape HTML to prevent XSS
-  function escapeHtml(text) {
-    return text.replace(/[&<>"']/g, (m) => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    })[m]);
-  }
-
-  // Chat form submit (send message + optional file)
+  // Chat form submit
   chatForm.addEventListener('submit', async e => {
     e.preventDefault();
-    const formData = new FormData();
-    const msg = chatInput.value.trim();
-    if (!msg && uploadFile.files.length === 0) {
-      alert('Please enter a message or attach a file');
-      return;
+    const message = chatInput.value.trim();
+    if (!message && !uploadFile.files.length) {
+      return alert('Please enter a message or select a file.');
     }
-    formData.append('message', msg);
-    if(uploadFile.files.length > 0) formData.append('file', uploadFile.files[0]);
 
-    const res = await fetch('/api/chat/send', {
-      method: 'POST',
-      body: formData
-    });
-    if(res.ok) {
-      chatInput.value = '';
-      uploadFile.value = '';
-      fetchChatMessages();
-    } else {
-      alert('Failed to send message');
+    const formData = new FormData();
+    formData.append('message', message);
+
+    if (uploadFile.files.length) {
+      const file = uploadFile.files[0];
+      if (file.size > 125 * 1024 * 1024) {
+        return alert('File exceeds 125 MB limit.');
+      }
+      formData.append('file', file);
+    }
+
+    try {
+      const res = await fetch('/api/chat/send', {
+        method: 'POST',
+        body: formData,
+      });
+      if (res.ok) {
+        chatInput.value = '';
+        uploadFile.value = '';
+        fetchChatMessages();
+      } else {
+        alert('Failed to send message.');
+      }
+    } catch {
+      alert('Error sending message.');
     }
   });
 
   // Profile picture upload
   uploadPfp.addEventListener('change', async () => {
-    if(uploadPfp.files.length === 0) return;
+    if (!uploadPfp.files.length) return;
     const file = uploadPfp.files[0];
-    if(file.size > 10 * 1024 * 1024) {
-      alert('Profile picture must be under 10MB');
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload a valid image.');
+      uploadPfp.value = '';
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Profile picture size limit is 10 MB.');
+      uploadPfp.value = '';
       return;
     }
     const formData = new FormData();
     formData.append('pfp', file);
-    const res = await fetch('/api/upload/pfp', {
-      method: 'POST',
-      body: formData
-    });
-    if(res.ok) {
-      alert('Profile picture uploaded!');
-      fetchChatMessages(); // refresh to show pfp in chat
-    } else {
-      alert('Failed to upload profile picture');
+
+    try {
+      const res = await fetch('/api/user/uploadPfp', {
+        method: 'POST',
+        body: formData
+      });
+      if (res.ok) {
+        alert('Profile picture uploaded successfully.');
+        uploadPfp.value = '';
+        // Optionally, refresh user data or UI
+      } else {
+        alert('Failed to upload profile picture.');
+      }
+    } catch {
+      alert('Error uploading profile picture.');
     }
   });
 
-  // Load admin logs
+  // Load admin logs if admin
   async function loadAdminLogs() {
-    const res = await fetch('/api/admin/logs');
-    if(res.ok) {
-      const logs = await res.json();
-      adminLogs.textContent = JSON.stringify(logs, null, 2);
+    adminLogsSection.style.display = 'block';
+    try {
+      const res = await fetch('/api/logs/admin');
+      if (res.ok) {
+        const text = await res.text();
+        adminLogs.textContent = text || 'No admin logs available.';
+      } else {
+        adminLogs.textContent = 'Failed to load admin logs.';
+      }
+    } catch {
+      adminLogs.textContent = 'Error loading admin logs.';
     }
   }
-  // Load superadmin logs
+
+  // Load superadmin logs if superadmin
   async function loadSuperadminLogs() {
-    const res = await fetch('/api/superadmin/logs');
-    if(res.ok) {
-      const logs = await res.json();
-      superadminLogs.textContent = JSON.stringify(logs, null, 2);
+    superadminLogsSection.style.display = 'block';
+    try {
+      const res = await fetch('/api/logs/superadmin');
+      if (res.ok) {
+        const text = await res.text();
+        superadminLogs.textContent = text || 'No superadmin logs available.';
+      } else {
+        superadminLogs.textContent = 'Failed to load superadmin logs.';
+      }
+    } catch {
+      superadminLogs.textContent = 'Error loading superadmin logs.';
     }
   }
 
-  // Initial check for session
-  checkLogin();
+  // Periodically refresh chat messages
+  setInterval(fetchChatMessages, 5000);
 
-  // Optional: Poll chat messages every 10 seconds
-  setInterval(fetchChatMessages, 10000);
+  // Initial login check
+  checkLogin();
 </script>
 </body>
 </html>
